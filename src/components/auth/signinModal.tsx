@@ -23,7 +23,7 @@ export function SignInModal({ open, onOpenChange }: SignInModalProps) {
         <DialogHeader className="flex flex-col items-center gap-2">
           <div className="relative h-36 w-28">
             <Image
-              src="/logo.png"
+              src="/big-logo.png"
               alt="Notra Logo"
               fill
               className="object-contain"
@@ -41,7 +41,7 @@ export function SignInModal({ open, onOpenChange }: SignInModalProps) {
           <Button
             variant="outline"
             className="w-full flex items-center justify-center gap-2 border-gray-300 hover:border-blue-500 hover:text-blue-500"
-            onClick={() => signIn("google", { callbackUrl: "/" })}
+            onClick={() => signIn("google", { callbackUrl: "/chat" })}
           >
             <FcGoogle size={20} />
             Continue with Google

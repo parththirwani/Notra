@@ -35,7 +35,7 @@ const ChatPage = () => {
 
   const handleNewSubject = () => {
     const newId = Date.now().toString();
-    const newSubject: Subject = { id: newId, title: "New Subject", isActive: true };
+    const newSubject: Subject = { id: newId, title: "New Chat", isActive: true };
 
     setSubjects(prev => [newSubject, ...prev.map(s => ({ ...s, isActive: false }))]);
     setCurrentSubjectId(newId);

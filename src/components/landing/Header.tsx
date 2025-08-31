@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Menu } from "lucide-react";
 import Image from "next/image";
 import { useSession, signOut } from "next-auth/react";
-import { SignInModal } from "../auth/authModal";
+import { SignInModal } from "../auth/signinModal";
 
 
 const Header = () => {
@@ -19,7 +19,7 @@ const Header = () => {
         <a href="/" className="flex items-center gap-2">
           <div className="relative h-36 w-28">
             <Image
-              src="/logo.png"
+              src="/big-logo.png"
               alt="Notra Logo"
               fill
               className="object-contain"
