@@ -77,3 +77,41 @@ export async function createCompletion(
     reader.releaseLock();
   }
 }
+
+export async function createCompletionOnce(
+  messages: { role: MessageRole; content: string }[],
+  model: MODEL
+): Promise<string> {
+  if (!process.env.OPENROUTER_KEY) {
+    throw new Error("OPENROUTER_API_KEY is not set");
+  }
+  const openRouterMessages: OpenRouterMessage[] = messages.map(msg => ({
+    role: msg.role as OpenRouterRole, 
+    content: msg.content,
+  }));
+
+  const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${process.env.OPENROUTER_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model,
+      messages: openRouterMessages,
+      stream: false,
+      temperature: 0.5,
+      max_tokens: 2000,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error("OpenRouter API error:", response.status, errorText);
+    throw new Error(`OpenRouter API error ${response.status}`);
+  }
+
+  const data = await response.json();
+  const content: string = data.choices?.[0]?.message?.content ?? "";
+  return content;
+}

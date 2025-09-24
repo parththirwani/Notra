@@ -17,9 +17,10 @@ interface ChatSidebarProps {
   subjects: Subject[];
   onSubjectSelect: (id: string) => void;
   onNewSubject: () => void;
+  onDeleteSubject?: (id: string) => void;
 }
 
-const ChatSidebar = ({ subjects, onSubjectSelect, onNewSubject }: ChatSidebarProps) => {
+const ChatSidebar = ({ subjects, onSubjectSelect, onNewSubject, onDeleteSubject }: ChatSidebarProps) => {
   const [collapsed, setCollapsed] = useState(false);
 
   return (
@@ -36,7 +37,7 @@ const ChatSidebar = ({ subjects, onSubjectSelect, onNewSubject }: ChatSidebarPro
 
       {/* Chat list */}
       {!collapsed && (
-        <SidebarChatHistory subjects={subjects} onSubjectSelect={onSubjectSelect} />
+        <SidebarChatHistory subjects={subjects} onSubjectSelect={onSubjectSelect} onDeleteSubject={onDeleteSubject} />
       )}
 
       {/* User section */}

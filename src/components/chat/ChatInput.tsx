@@ -34,11 +34,6 @@ const ChatInput = ({ onSendMessage, disabled }: ChatInputProps) => {
         bg-gray-100 dark:bg-[#1f1f1f] 
         px-4 h-12 max-w-2xl mx-auto transition-colors"
       >
-        {/* Left icon */}
-        <Paperclip
-          size={18}
-          className="text-gray-500 dark:text-gray-400"
-        />
 
         {/* Input */}
         <Textarea

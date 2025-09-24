@@ -8,6 +8,25 @@ import { RedisStore } from '@/lib/ai/InMeomeryStore';
 
 const store = RedisStore.getInstance();
 
+function detectInteractiveIntent(input: string): boolean {
+  const text = input.toLowerCase();
+  return /(mcq|mcw|multiple\s*choice|flash\s*card|flashcard|practice\s*(quiz|question|mcq))/i.test(text);
+}
+
+function getFormattingInstruction(): string {
+  return [
+    'You are an API message formatter. If and only if the user requests MCQ/MCW/flashcard practice, respond with a SINGLE JSON object and nothing else.',
+    'Do NOT wrap in markdown code fences, do NOT add any prose before or after. No newlines before/after the JSON.',
+    'Supported schemas:',
+    '{ "type": "mcq", "question": string, "options": Array< { "text": string, "correct"?: boolean } | string >, "multipleCorrect"?: boolean }',
+    '{ "type": "flashcard", "front": string, "back": string }',
+    'Rules:',
+    '- For MCQ, include "correct": true on the correct options when answers are known; omit otherwise.',
+    '- Use "type": "mcw" interchangeably with "mcq" when the user says MCW.',
+    '- Keep text concise; avoid excessive formatting or extra fields.',
+  ].join('\n');
+}
+
 export async function GET(req: Request, context: { params: { id: string } }) {
   const prisma = new PrismaClient();
   try {
@@ -86,17 +105,21 @@ export async function POST(req: Request, context: { params: { id: string } }) {
     console.log('[DEBUG] Messages count:', messages.length);
     console.log('[DEBUG] Last message:', messages[messages.length - 1]);
     
-    const openRouterMessages = messages.map((msg) => ({
-      role: msg.role,
-      content: msg.content,
-    }));
+    const shouldFormat = detectInteractiveIntent(message);
+    const openRouterMessages = [
+      ...(shouldFormat ? [{ role: MessageRole.system, content: getFormattingInstruction() }] : []),
+      ...messages.map((msg) => ({
+        role: msg.role,
+        content: msg.content,
+      })),
+    ];
     
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
       async start(controller) {
         let fullAssistantContent = '';
         try {
-          await createCompletion(openRouterMessages, model, (chunk: string) => {
+          await createCompletion(openRouterMessages as any, model, (chunk: string) => {
             fullAssistantContent += chunk;
             controller.enqueue(encoder.encode(`data: ${chunk}\n\n`));
           });
