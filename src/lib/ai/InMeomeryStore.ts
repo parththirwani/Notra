@@ -1,71 +1,81 @@
 import { PrismaClient, MessageRole } from '@prisma/client';
-import { Message } from '@/types/chat'; // Adjust path
+import Redis from 'ioredis';
+import { Message } from '@/types/chat';
 
+const redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6380'); 
 const prisma = new PrismaClient();
-const EVICTION_TIME = 5 * 60 * 1000; // 5 minutes
+const CACHE_TTL = 5 * 60; // 5 minutes in seconds
 
-export class InMemoryStore {
-  private static instance: InMemoryStore;
-  private store: Record<
-    string,
-    {
-      messages: Message[];
-      evictionTime: number;
-    }
-  >;
-  private clock: NodeJS.Timeout;
-
-  private constructor() {
-    this.store = {};
-    this.clock = setInterval(() => {
-      const now = Date.now();
-      Object.entries(this.store).forEach(([key, value]) => {
-        if (now > value.evictionTime) {
-          console.log(`evicting key ${key}`);
-          delete this.store[key];
-        }
-      });
-    }, 60 * 1000);
-  }
-
-  public destroy() {
-    clearInterval(this.clock);
-  }
+export class RedisStore {
+  private static instance: RedisStore;
 
   static getInstance() {
-    if (!InMemoryStore.instance) {
-      InMemoryStore.instance = new InMemoryStore();
+    if (!RedisStore.instance) {
+      RedisStore.instance = new RedisStore();
+      console.log('[RedisStore] Instance created');
     }
-    return InMemoryStore.instance;
+    return RedisStore.instance;
   }
 
-  add(conversationId: string, message: Message) {
-    if (!this.store[conversationId]) {
-      this.store[conversationId] = {
-        messages: [],
-        evictionTime: Date.now() + EVICTION_TIME,
-      };
-    }
-    this.store[conversationId].messages.push(message);
-    this.store[conversationId].evictionTime = Date.now() + EVICTION_TIME;
+  async add(conversationId: string, message: Message): Promise<Message[]> {
+    const key = `chat:${conversationId}`;
+    console.log(`[RedisStore] Adding message to conversation: ${conversationId}, role: ${message.role}`);
+    
+    // Get existing messages (loads from DB if not in Redis)
+    const messages = await this.get(conversationId);
+    console.log(`[RedisStore] Current message count for ${conversationId}: ${messages.length}`);
+    
+    // Add new message
+    messages.push(message);
+    console.log(`[RedisStore] Message added. New count: ${messages.length}`);
+    
+    // Store back in Redis with TTL
+    await redis.setex(key, CACHE_TTL, JSON.stringify(messages));
+    console.log(`[RedisStore] Messages cached in Redis for ${conversationId} with TTL: ${CACHE_TTL}s`);
+    
+    return messages; // Return updated messages
   }
 
   async get(conversationId: string): Promise<Message[]> {
-    if (!this.store[conversationId]) {
-      const dbMessages = await prisma.message.findMany({
-        where: { conversationId },
-        orderBy: { createdAt: 'asc' },
-      });
-      this.store[conversationId] = {
-        messages: dbMessages.map((m) => ({
-          id: m.id,
-          content: m.content,
-          role: m.role, // MessageRole from Prisma
-          timestamp: m.createdAt.toISOString(),
-        })),
-        evictionTime: Date.now() + EVICTION_TIME,
-      };
+    const key = `chat:${conversationId}`;
+    console.log(`[RedisStore] Retrieving messages for conversation: ${conversationId}`);
+    
+    // Try to get from Redis first
+    const cached = await redis.get(key);
+    
+    if (cached) {
+      console.log(`[RedisStore] Messages found in Redis cache for ${conversationId}`);
+      // Extend TTL on access
+      await redis.expire(key, CACHE_TTL);
+      console.log(`[RedisStore] TTL extended for ${conversationId}`);
+      const messages = JSON.parse(cached);
+      console.log(`[RedisStore] Returning ${messages.length} cached messages`);
+      return messages;
     }
-    return this.store[conversationId].messages;
+    
+    // Not in Redis, load from database
+    console.log(`[RedisStore] No cache found. Loading conversation ${conversationId} from database`);
+    const dbMessages = await prisma.message.findMany({
+      where: { conversationId },
+      orderBy: { createdAt: 'asc' },
+    });
+    console.log(`[RedisStore] Loaded ${dbMessages.length} messages from database for ${conversationId}`);
+    
+    const messages: Message[] = dbMessages.map((m) => ({
+      id: m.id,
+      content: m.content,
+      role: m.role,
+      timestamp: m.createdAt.toISOString(),
+    }));
+    
+    // Cache in Redis
+    if (messages.length > 0) {
+      await redis.setex(key, CACHE_TTL, JSON.stringify(messages));
+      console.log(`[RedisStore] ${messages.length} messages cached in Redis for ${conversationId}`);
+    } else {
+      console.log(`[RedisStore] No messages to cache for ${conversationId}`);
+    }
+    
+    return messages;
   }
 }
