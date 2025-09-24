@@ -26,7 +26,7 @@ const LandingPage = () => {
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
-    name: "Notra (Note Ultra)",
+    name: "Notra (Notes Ultra)",
     applicationCategory: "EducationalApplication",
     operatingSystem: "Web",
     description:

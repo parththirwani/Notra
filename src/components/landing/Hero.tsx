@@ -46,7 +46,7 @@ const Hero = () => {
           {/* Badge */}
           <div className="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700 tracking-wider uppercase">
             <div className="h-1.5 w-1.5 rounded-full bg-blue-600" />
-            Notra — Note Ultra
+            Notra — Notes Ultra
           </div>
 
           {/* Main heading - one line */}

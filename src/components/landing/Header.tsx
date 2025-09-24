@@ -26,7 +26,7 @@ const Header = () => {
               priority
             />
           </div>
-          <span className="sr-only">Notra (Note Ultra)</span>
+          <span className="sr-only">Notra (Notes Ultra)</span>
         </a>
 
         {/* Nav links */}

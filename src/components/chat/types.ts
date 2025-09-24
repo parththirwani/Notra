@@ -1,7 +1,9 @@
+import { MessageRole } from "@prisma/client";
+
 export interface Message {
   id: string;
   content: string;
-  isUser: boolean;
+  role: MessageRole
   timestamp?: string;
 }
 
