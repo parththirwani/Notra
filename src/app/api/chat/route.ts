@@ -8,6 +8,59 @@ import { RedisStore } from '@/lib/ai/InMeomeryStore';
 
 const store = RedisStore.getInstance();
 
+// Function to generate a title from the first message
+const generateChatTitle = (message: string) => {
+  const maxLength = 50; // Maximum length for title
+  return message.length > maxLength 
+    ? `${message.substring(0, maxLength - 3)}...`
+    : message;
+};
+
+export async function GET(req: Request) {
+  const prisma = new PrismaClient();
+  try {
+    const session = await getAuthSession();
+
+    // Fetch all conversations for the user
+    const conversations = await prisma.conversation.findMany({
+      where: { userId: session.user.id },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    // Use Redis store to get the most up-to-date messages for each conversation
+    const enrichedConversations = await Promise.all(
+      conversations.map(async (conversation) => {
+        const messages = await store.get(conversation.id);
+        return {
+          id: conversation.id,
+          userId: conversation.userId,
+          title: conversation.title,
+          createdAt: conversation.createdAt,
+          messages: messages.map(msg => ({
+            id: msg.id || null,
+            content: msg.content,
+            role: msg.role,
+            createdAt: new Date(msg.timestamp || new Date()),
+          })),
+        };
+      })
+    );
+
+    return NextResponse.json(
+      { conversations: enrichedConversations },
+      { status: 200 }
+    );
+  } catch (error) {
+    console.error(error);
+    if (error instanceof Error && error.message.includes('Unauthorized')) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+  } finally {
+    await prisma.$disconnect();
+  }
+}
+
 export async function POST(req: Request) {
   const prisma = new PrismaClient();
   try {
@@ -15,13 +68,16 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { message, model } = CreateChatSchema.parse(body);
     
+    // Create conversation with a title
     const conversation = await prisma.conversation.create({
-      data: { userId: session.user.id },
+      data: { 
+        userId: session.user.id,
+        title: generateChatTitle(message),
+      },
     });
     
     const conversationId = conversation.id;
     
-    // ✅ Get messages from add() - for new conversation, this will be just the user message
     const messages = await store.add(conversationId, {
       content: message,
       role: MessageRole.user,
@@ -40,9 +96,12 @@ export async function POST(req: Request) {
       async start(controller) {
         let fullAssistantContent = '';
         try {
-          // Send conversationId as the first SSE message
+          // Send conversationId and title as the first SSE message
           controller.enqueue(
-            encoder.encode(`data: ${JSON.stringify({ conversationId })}\n\n`)
+            encoder.encode(`data: ${JSON.stringify({ 
+              conversationId,
+              title: conversation.title 
+            })}\n\n`)
           );
           
           await createCompletion(openRouterMessages, model, (chunk: string) => {
@@ -50,14 +109,14 @@ export async function POST(req: Request) {
             controller.enqueue(encoder.encode(`data: ${chunk}\n\n`));
           });
           
-          // ✅ Add assistant message
+          // Add assistant message to cache
           await store.add(conversationId, {
             content: fullAssistantContent,
             role: MessageRole.assistant,
             timestamp: new Date().toISOString(),
           });
           
-          // Save to database
+          // Save both messages to database
           await prisma.message.create({
             data: { conversationId, content: message, role: MessageRole.user },
           });
@@ -69,6 +128,10 @@ export async function POST(req: Request) {
             },
           });
           
+          // Clear Redis cache to ensure consistency
+          await store.delete(conversationId);
+          
+          // Send completion message
           controller.enqueue(encoder.encode(`data: [DONE]\n\n`));
         } catch (err) {
           controller.error(err);
@@ -98,4 +161,3 @@ export async function POST(req: Request) {
     await prisma.$disconnect();
   }
 }
-
