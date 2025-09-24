@@ -8,23 +8,104 @@ import { RedisStore } from '@/lib/ai/InMeomeryStore';
 
 const store = RedisStore.getInstance();
 
-function detectInteractiveIntent(input: string): boolean {
+function detectInteractiveIntent(input: string): { type: 'quiz' | 'mcq' | 'flashcard' | null } {
   const text = input.toLowerCase();
-  return /(mcq|mcw|multiple\s*choice|flash\s*card|flashcard|practice\s*(quiz|question|mcq))/i.test(text);
+  
+  // Check for quiz intent (multiple questions)
+  if (/(quiz|practice\s*(quiz|questions?)|5\s*questions?|multiple\s*questions?)/i.test(text)) {
+    console.log('[DEBUG] Detected QUIZ intent for:', text);
+    return { type: 'quiz' };
+  }
+  
+  // Check for single MCQ intent
+  if (/(mcq|mcw|multiple\s*choice|single\s*question)/i.test(text)) {
+    console.log('[DEBUG] Detected MCQ intent for:', text);
+    return { type: 'mcq' };
+  }
+  
+  // Check for flashcard intent
+  if (/(flash\s*card|flashcard)/i.test(text)) {
+    console.log('[DEBUG] Detected FLASHCARD intent for:', text);
+    return { type: 'flashcard' };
+  }
+  
+  console.log('[DEBUG] No interactive intent detected for:', text);
+  return { type: null };
 }
 
-function getFormattingInstruction(): string {
-  return [
-    'You are an API message formatter. If and only if the user requests MCQ/MCW/flashcard practice, respond with a SINGLE JSON object and nothing else.',
-    'Do NOT wrap in markdown code fences, do NOT add any prose before or after. No newlines before/after the JSON.',
-    'Supported schemas:',
-    '{ "type": "mcq", "question": string, "options": Array< { "text": string, "correct"?: boolean } | string >, "multipleCorrect"?: boolean }',
-    '{ "type": "flashcard", "front": string, "back": string }',
-    'Rules:',
-    '- For MCQ, include "correct": true on the correct options when answers are known; omit otherwise.',
-    '- Use "type": "mcw" interchangeably with "mcq" when the user says MCW.',
-    '- Keep text concise; avoid excessive formatting or extra fields.',
-  ].join('\n');
+function getFormattingInstruction(intentType: 'quiz' | 'mcq' | 'flashcard'): string {
+  if (intentType === 'quiz') {
+    return `You are a quiz generator. Generate a quiz with exactly 5 questions about the requested topic.
+
+CRITICAL: You must respond with ONLY a valid JSON object. No markdown, no code fences, no additional text.
+
+Required JSON format:
+{
+  "type": "quiz",
+  "title": "Quiz Title Here",
+  "questions": [
+    {
+      "question": "Question text here?",
+      "options": [
+        {"text": "Option A", "correct": false},
+        {"text": "Option B", "correct": true},
+        {"text": "Option C", "correct": false},
+        {"text": "Option D", "correct": false}
+      ]
+    }
+  ]
+}
+
+Rules:
+- Generate exactly 5 questions
+- Each question must have exactly 4 options
+- Mark the correct answer with "correct": true
+- Make questions educational and challenging
+- Respond with ONLY the JSON object, nothing else`;
+  }
+  
+  if (intentType === 'mcq') {
+    return `You are an MCQ generator. Generate a single multiple choice question about the requested topic.
+
+CRITICAL: You must respond with ONLY a valid JSON object. No markdown, no code fences, no additional text.
+
+Required JSON format:
+{
+  "type": "mcq",
+  "question": "Question text here?",
+  "options": [
+    {"text": "Option A", "correct": false},
+    {"text": "Option B", "correct": true},
+    {"text": "Option C", "correct": false},
+    {"text": "Option D", "correct": false}
+  ]
+}
+
+Rules:
+- Generate exactly 1 question with 4 options
+- Mark the correct answer with "correct": true
+- Respond with ONLY the JSON object, nothing else`;
+  }
+  
+  if (intentType === 'flashcard') {
+    return `You are a flashcard generator. Generate a flashcard about the requested topic.
+
+CRITICAL: You must respond with ONLY a valid JSON object. No markdown, no code fences, no additional text.
+
+Required JSON format:
+{
+  "type": "flashcard",
+  "front": "Front side text",
+  "back": "Back side text"
+}
+
+Rules:
+- Create clear front and back content
+- Make it educational and concise
+- Respond with ONLY the JSON object, nothing else`;
+  }
+  
+  return '';
 }
 
 export async function GET(req: Request, context: { params: { id: string } }) {
@@ -33,35 +114,46 @@ export async function GET(req: Request, context: { params: { id: string } }) {
     const session = await getAuthSession();
     const { id: conversationId } = await context.params;
 
-    // Fetch conversation from database
+    // Fetch the conversation
     const conversation = await prisma.conversation.findUnique({
       where: { id: conversationId },
     });
 
     if (!conversation || conversation.userId !== session.user.id) {
-      return NextResponse.json(
-        { error: 'Conversation not found or unauthorized' },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: 'Conversation not found or unauthorized' }, { status: 404 });
     }
 
-    // Get messages from Redis store (which handles DB fallback internally)
-    const messages = await store.get(conversationId);
+    // Get messages from Redis cache first, then fallback to database
+    let messages = await store.get(conversationId);
+    
+    if (messages.length === 0) {
+      // Fallback to database if Redis is empty
+      const dbMessages = await prisma.message.findMany({
+        where: { conversationId },
+        orderBy: { createdAt: 'asc' },
+      });
+      
+      messages = dbMessages.map(msg => ({
+        id: msg.id,
+        content: msg.content,
+        role: msg.role,
+        timestamp: msg.createdAt.toISOString(),
+      }));
+    }
 
     return NextResponse.json(
-      {
+      { 
         conversation: {
           id: conversation.id,
-          userId: conversation.userId,
           title: conversation.title,
           createdAt: conversation.createdAt,
-          messages: messages.map(msg => ({
-            id: msg.id || null,
-            content: msg.content,
-            role: msg.role,
-            createdAt: new Date(msg.timestamp || new Date()),
-          })),
         },
+        messages: messages.map(msg => ({
+          id: msg.id || null,
+          content: msg.content,
+          role: msg.role,
+          createdAt: new Date(msg.timestamp || new Date()),
+        }))
       },
       { status: 200 }
     );
@@ -81,39 +173,40 @@ export async function POST(req: Request, context: { params: { id: string } }) {
   try {
     const session = await getAuthSession();
     const { id: conversationId } = await context.params;
-    
+    const body = await req.json();
+    const { message, model } = CreateChatSchema.parse(body);
+
+    // Verify conversation ownership
     const conversation = await prisma.conversation.findUnique({
       where: { id: conversationId },
     });
-    
+
     if (!conversation || conversation.userId !== session.user.id) {
-      return NextResponse.json(
-        { error: 'Conversation not found or unauthorized' },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: 'Conversation not found or unauthorized' }, { status: 404 });
     }
-    
-    const body = await req.json();
-    const { message, model } = CreateChatSchema.parse(body);
-    
+
+    // Add user message to cache
     const messages = await store.add(conversationId, {
       content: message,
       role: MessageRole.user,
       timestamp: new Date().toISOString(),
     });
-    
-    console.log('[DEBUG] Messages count:', messages.length);
-    console.log('[DEBUG] Last message:', messages[messages.length - 1]);
-    
-    const shouldFormat = detectInteractiveIntent(message);
+
+    console.log('[DEBUG] Existing conversation messages count:', messages.length);
+
+    // Build messages for OpenRouter, optionally prepend a system formatting instruction
+    const intent = detectInteractiveIntent(message);
     const openRouterMessages = [
-      ...(shouldFormat ? [{ role: MessageRole.system, content: getFormattingInstruction() }] : []),
+      ...(intent.type ? [{ role: MessageRole.system, content: getFormattingInstruction(intent.type) }] : []),
       ...messages.map((msg) => ({
         role: msg.role,
         content: msg.content,
       })),
     ];
-    
+
+    console.log('[DEBUG] Intent detected:', intent.type);
+    console.log('[DEBUG] System instruction added:', !!intent.type);
+
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
       async start(controller) {
@@ -123,14 +216,16 @@ export async function POST(req: Request, context: { params: { id: string } }) {
             fullAssistantContent += chunk;
             controller.enqueue(encoder.encode(`data: ${chunk}\n\n`));
           });
-          
+
+          console.log('[DEBUG] Full assistant response:', fullAssistantContent);
+
           // Add assistant message to cache
           await store.add(conversationId, {
             content: fullAssistantContent,
             role: MessageRole.assistant,
             timestamp: new Date().toISOString(),
           });
-          
+
           // Save both messages to database
           await prisma.message.create({
             data: { conversationId, content: message, role: MessageRole.user },
@@ -142,10 +237,11 @@ export async function POST(req: Request, context: { params: { id: string } }) {
               role: MessageRole.assistant,
             },
           });
-          
-          // Clear Redis cache to ensure next request loads fresh data from DB
+
+          // Clear Redis cache to ensure consistency
           await store.delete(conversationId);
-          
+
+          // Send completion message
           controller.enqueue(encoder.encode(`data: [DONE]\n\n`));
         } catch (err) {
           controller.error(err);
@@ -154,7 +250,7 @@ export async function POST(req: Request, context: { params: { id: string } }) {
         }
       },
     });
-    
+
     return new Response(stream, {
       headers: {
         'Content-Type': 'text/event-stream',
@@ -182,20 +278,14 @@ export async function DELETE(req: Request, context: { params: { id: string } }) 
     const session = await getAuthSession();
     const { id: conversationId } = await context.params;
 
-    // Verify conversation exists and belongs to user
+    // Verify conversation ownership
     const conversation = await prisma.conversation.findUnique({
       where: { id: conversationId },
     });
 
     if (!conversation || conversation.userId !== session.user.id) {
-      return NextResponse.json(
-        { error: 'Conversation not found or unauthorized' },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: 'Conversation not found or unauthorized' }, { status: 404 });
     }
-
-    // Delete from Redis store
-    await store.delete(conversationId);
 
     // Delete from database
     await prisma.message.deleteMany({
@@ -205,12 +295,15 @@ export async function DELETE(req: Request, context: { params: { id: string } }) 
       where: { id: conversationId },
     });
 
-    return NextResponse.json(
-      { message: 'Conversation deleted successfully' },
-      { status: 200 }
-    );
+    // Clear from Redis cache
+    await store.delete(conversationId);
+
+    return NextResponse.json({ success: true }, { status: 200 });
   } catch (error) {
     console.error(error);
+    if (error instanceof Error && error.message.includes('Unauthorized')) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   } finally {
     await prisma.$disconnect();
