@@ -46,8 +46,55 @@ function normalizeMCQ(payload: MCQSchemaV1) {
 	};
 }
 
+// Helper function to check if JSON appears complete
+function isCompleteJSON(content: string): boolean {
+	const trimmed = content.trim();
+	if (!trimmed.startsWith('{') || !trimmed.endsWith('}')) {
+		return false;
+	}
+	
+	// Count braces to check if they're balanced
+	let braceCount = 0;
+	let inString = false;
+	let escaped = false;
+	
+	for (let i = 0; i < trimmed.length; i++) {
+		const char = trimmed[i];
+		
+		if (escaped) {
+			escaped = false;
+			continue;
+		}
+		
+		if (char === '\\') {
+			escaped = true;
+			continue;
+		}
+		
+		if (char === '"') {
+			inString = !inString;
+			continue;
+		}
+		
+		if (!inString) {
+			if (char === '{') {
+				braceCount++;
+			} else if (char === '}') {
+				braceCount--;
+			}
+		}
+	}
+	
+	return braceCount === 0;
+}
+
 export default function InteractiveMessage({ content }: { content: string }) {
 	const parsed = useMemo(() => {
+		// Only attempt JSON parsing if the content appears to be complete JSON
+		if (!isCompleteJSON(content)) {
+			return null;
+		}
+		
 		try {
 			const obj = JSON.parse(content);
 			if (isParsedPayload(obj)) return obj as ParsedPayload;

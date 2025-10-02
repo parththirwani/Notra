@@ -43,15 +43,12 @@ function normalizeMarkdownContent(input: string): string {
 }
 
 function applySoftBreaks(input: string): string {
-	// Add markdown soft breaks only for plain text lines. Do not add before structural lines.
-	const lines = input.split(/\n/);
-	let out: string[] = [];
+	const lines = input.split("\n");
+	const out: string[] = [];
 	for (let i = 0; i < lines.length; i++) {
 		const line = lines[i];
-		const next = lines[i + 1] ?? "";
-		const nextIsStructural = /^(\s*[-*+]\s|\s*\d+\.\s|\s*>\s|\s*#{1,6}\s|\s*```|\s*$)/.test(next);
-		if (!nextIsStructural) {
-			out.push(line + "  ");
+		if (line.trim() === "" || line.match(/^\s*[#-]/) || line.match(/^\s*\d+\./)) {
+			out.push(line);
 		} else {
 			out.push(line);
 		}
@@ -59,9 +56,79 @@ function applySoftBreaks(input: string): string {
 	return out.join("\n");
 }
 
+// Helper function to detect incomplete tables
+function hasIncompleteTable(content: string): boolean {
+	const lines = content.split('\n');
+	let inTable = false;
+	let hasHeaderSeparator = false;
+	
+	for (let i = 0; i < lines.length; i++) {
+		const line = lines[i].trim();
+		
+		// Check if line looks like a table row
+		if (line.includes('|') && line.length > 1) {
+			if (!inTable) {
+				inTable = true;
+				hasHeaderSeparator = false;
+			}
+			
+			// Check if this is a header separator line (like | --- | --- |)
+			if (line.match(/^\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$/)) {
+				hasHeaderSeparator = true;
+			}
+		} else if (inTable && line === '') {
+			// Empty line might be end of table or just spacing
+			continue;
+		} else if (inTable && !line.includes('|')) {
+			// Non-table line after table content - table is complete
+			inTable = false;
+		}
+	}
+	
+	// If we're still in a table at the end, check if it's incomplete
+	if (inTable && hasHeaderSeparator) {
+		const lastTableLine = lines[lines.length - 1];
+		// Incomplete if: has pipes but doesn't end with pipe, OR has odd number of pipes
+		if (lastTableLine && lastTableLine.includes('|')) {
+			const trimmed = lastTableLine.trim();
+			const pipeCount = (trimmed.match(/\|/g) || []).length;
+			// Table row should have pipes at start/end and between cells
+			// If it doesn't end with |, or has inconsistent pipe count, it's incomplete
+			if (!trimmed.endsWith('|') || pipeCount < 2) {
+				return true;
+			}
+		}
+	}
+	
+	return false;
+}
+
+// Helper function to clean up incomplete table rows
+function preprocessContent(content: string): string {
+	if (hasIncompleteTable(content)) {
+		const lines = content.split('\n');
+		
+		// Find the last table line and remove it if incomplete
+		for (let i = lines.length - 1; i >= 0; i--) {
+			const line = lines[i].trim();
+			if (line.includes('|')) {
+				// Remove incomplete row to prevent malformed rendering
+				lines.splice(i, 1);
+				break;
+			}
+		}
+		
+		return lines.join('\n');
+	}
+	
+	return content;
+}
+
 const MarkdownMessage = ({ content, isDark }: MarkdownMessageProps) => {
 	const normalized = normalizeMarkdownContent(content);
-	const prepared = applySoftBreaks(normalized);
+	const preprocessed = preprocessContent(normalized);
+	const prepared = applySoftBreaks(preprocessed);
+	
 	return (
 		<div className={isDark ? "prose-invert" : undefined}>
 			<ReactMarkdown
@@ -106,7 +173,7 @@ const MarkdownMessage = ({ content, isDark }: MarkdownMessageProps) => {
 						<table className="w-full border-collapse my-3 text-sm" {...props} />
 					),
 					thead: ({ node, ...props }) => <thead className="bg-black/10" {...props} />,
-					tbody: ({ node, ...props }) => <tbody className="divide-y divide-black/10 dark:divide-white/10" {...props} />,
+					tbody: ({ node, ...props }) => <tbody {...props} />,
 					tr: ({ node, ...props }) => <tr className="hover:bg-black/5 dark:hover:bg-white/5" {...props} />,
 					th: ({ node, ...props }) => (
 						<th className="border px-3 py-2 font-semibold" {...props} />
@@ -156,4 +223,4 @@ function codeRenderer({ className, children, props }: { className?: string; chil
 	);
 }
 
-export default MarkdownMessage; 
+export default MarkdownMessage;
