@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 import { MessageRole } from "@prisma/client";
 import MarkdownMessage from "./MarkdownMessage";
 import InteractiveMessage from "./InteractiveMessage";
+import { useEffect, useRef } from "react";
 
 interface ChatAreaProps {
 	messages: Message[];
@@ -26,6 +27,16 @@ function formatLocalTimestamp(timestamp?: string): string {
 }
 
 const ChatArea = ({ messages }: ChatAreaProps) => {
+	const messagesEndRef = useRef<HTMLDivElement>(null);
+
+	const scrollToBottom = () => {
+		messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+	};
+
+	useEffect(() => {
+		scrollToBottom();
+	}, [messages]);
+
 	return (
 		<div className="flex flex-col gap-4 p-4">
 			{messages.map((message) => (
@@ -57,6 +68,7 @@ const ChatArea = ({ messages }: ChatAreaProps) => {
 					</div>
 				</div>
 			))}
+			<div ref={messagesEndRef} />
 		</div>
 	);
 };
