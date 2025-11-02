@@ -42,6 +42,7 @@ const ChatPage = () => {
 					content: m.content,
 					role: m.role,
 					timestamp: typeof m.timestamp === "string" ? m.timestamp : (m as any).createdAt ? new Date((m as any).createdAt).toISOString() : undefined,
+					image: m.image,
 				}));
 			}
 
@@ -112,7 +113,7 @@ const ChatPage = () => {
 		}
 	}, [currentSubjectId, subjects]);
 
-	const handleSendMessage = useCallback(async (content: string) => {
+	const handleSendMessage = useCallback(async (content: string, image?: string) => {
 		// Cancel any previous stream
 		controllerRef.current?.abort();
 		const controller = new AbortController();
@@ -124,7 +125,7 @@ const ChatPage = () => {
 			const res = await fetch(API_BASE, {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ message: content, model: "openai/gpt-4o" }),
+				body: JSON.stringify({ message: content, model: "openai/gpt-4o", image }),
 				signal: controller.signal,
 			});
 			if (!res.ok || !res.body) { setIsStreaming(false); return; }
@@ -147,6 +148,7 @@ const ChatPage = () => {
 							content,
 							role: MessageRole.user,
 							timestamp: new Date().toISOString(),
+							image,
 						});
 						return; // do not treat this meta chunk as assistant content
 					} catch {
@@ -187,12 +189,13 @@ const ChatPage = () => {
 			content,
 			role: MessageRole.user,
 			timestamp: new Date().toISOString(),
+			image,
 		});
 
 		const res = await fetch(`${API_BASE}/${conversationId}`, {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ message: content, model: "openai/gpt-4o" }),
+			body: JSON.stringify({ message: content, model: "openai/gpt-4o", image }),
 			signal: controller.signal,
 		});
 		if (!res.ok || !res.body) { setIsStreaming(false); return; }

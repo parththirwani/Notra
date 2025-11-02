@@ -1,10 +1,11 @@
 import { MessageRole } from "@prisma/client";
 
 export interface Message {
-  id: string;
+  id?: string; 
   content: string;
-  role: MessageRole
+  role: MessageRole; 
   timestamp?: string;
+  image?: string; // base64 data URL for images
 }
 
 export interface Subject {

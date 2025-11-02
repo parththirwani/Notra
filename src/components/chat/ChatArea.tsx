@@ -5,6 +5,7 @@ import { MessageRole } from "@prisma/client";
 import MarkdownMessage from "./MarkdownMessage";
 import InteractiveMessage from "./InteractiveMessage";
 import { useEffect, useRef } from "react";
+import Image from "next/image";
 
 interface ChatAreaProps {
 	messages: Message[];
@@ -55,11 +56,25 @@ const ChatArea = ({ messages }: ChatAreaProps) => {
 								: "bg-gray-200 text-gray-900 self-start dark:bg-[#2a2a2a] dark:text-white"
 						)}
 					>
+						{/* Display image if present */}
+						{message.image && (
+							<div className="mb-3 rounded-lg overflow-hidden border-2 border-white/20">
+								<div className="relative w-full h-48">
+									<Image
+										src={message.image}
+										alt="Uploaded image"
+										fill
+										className="object-cover"
+									/>
+								</div>
+							</div>
+						)}
+						
 						<div className={cn("markdown-body", message.role === MessageRole.user ? "text-white" : "")}> 
 							{message.role === MessageRole.assistant ? (
 								<InteractiveMessage content={message.content} />
 							) : (
-								<MarkdownMessage content={message.content} isDark={false} />
+								<MarkdownMessage content={message.content || ""} isDark={false} />
 							)}
 						</div>
 						<div className="text-xs opacity-70 mt-2 text-right">

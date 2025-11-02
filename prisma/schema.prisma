@@ -8,14 +8,14 @@ datasource db {
 }
 
 model User {
-  id            String   @id @default(cuid())
+  id            String         @id @default(cuid())
   name          String?
-  email         String?  @unique
+  email         String?        @unique
   emailVerified DateTime?
   image         String?
   accounts      Account[]
   conversations Conversation[]
-  role          Role     @default(guest)
+  role          Role           @default(guest)
 }
 
 model Account {
@@ -31,12 +31,10 @@ model Account {
   scope              String?
   id_token           String?
   session_state      String?
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user               User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([provider, providerAccountId])
 }
-
 
 model VerificationToken {
   identifier String
@@ -47,36 +45,36 @@ model VerificationToken {
 }
 
 model Conversation {
-  id              String   @id @default(uuid())
-  title           String?
-  userId          String
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  messages        Message[]
+  id        String    @id @default(uuid())
+  title     String?
+  userId    String
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages  Message[]
 
   @@map("conversations")
   @@index([userId, createdAt])
 }
 
 model Message {
-  id              String   @id @default(uuid())
-  conversationId  String
-  content         String
-  role            MessageRole
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id             String       @id @default(uuid())
+  conversationId String
+  content        String
+  role           MessageRole
+  image          String?      // Add this line - stores base64 data URL
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
-  conversation    Conversation  @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   @@index([conversationId, createdAt])
 }
 
 enum Role {
-    admin
-    guest
-    user
-    paid_user
+  admin
+  guest
+  user
+  paid_user
 }
 
 enum MessageRole {

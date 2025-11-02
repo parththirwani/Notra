@@ -16,12 +16,12 @@ export const CreateChatSchema = z.object({
   model: z.enum(SUPPORTED_MODELS),
 });
 
-
 export interface Message {
   id?: string; 
   content: string;
   role: MessageRole; 
   timestamp?: string;
+  image?: string; // base64 data URL for images
 }
 
 export type Messages = Message[];

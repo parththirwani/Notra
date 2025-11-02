@@ -8,6 +8,11 @@ import { RedisStore } from '@/lib/ai/InMeomeryStore';
 
 const store = RedisStore.getInstance();
 
+// Updated schema to include optional image
+const CreateChatWithImageSchema = CreateChatSchema.extend({
+  image: z.string().optional(), // base64 data URL
+});
+
 function detectInteractiveIntent(input: string): { type: 'quiz' | 'mcq' | 'flashcard' | null } {
   const text = input.toLowerCase();
   
@@ -138,6 +143,7 @@ export async function GET(req: Request, context: { params: { id: string } }) {
         content: msg.content,
         role: msg.role,
         timestamp: msg.createdAt.toISOString(),
+        image: msg.image || undefined,
       }));
     }
 
@@ -152,6 +158,7 @@ export async function GET(req: Request, context: { params: { id: string } }) {
           id: msg.id || null,
           content: msg.content,
           role: msg.role,
+          image: msg.image,
           createdAt: new Date(msg.timestamp || new Date()),
         }))
       },
@@ -174,7 +181,7 @@ export async function POST(req: Request, context: { params: { id: string } }) {
     const session = await getAuthSession();
     const { id: conversationId } = await context.params;
     const body = await req.json();
-    const { message, model } = CreateChatSchema.parse(body);
+    const { message, model, image } = CreateChatWithImageSchema.parse(body);
 
     // Verify conversation ownership
     const conversation = await prisma.conversation.findUnique({
@@ -190,6 +197,7 @@ export async function POST(req: Request, context: { params: { id: string } }) {
       content: message,
       role: MessageRole.user,
       timestamp: new Date().toISOString(),
+      image,
     });
 
     console.log('[DEBUG] Existing conversation messages count:', messages.length);
@@ -201,6 +209,7 @@ export async function POST(req: Request, context: { params: { id: string } }) {
       ...messages.map((msg) => ({
         role: msg.role,
         content: msg.content,
+        image: msg.image,
       })),
     ];
 
@@ -228,7 +237,12 @@ export async function POST(req: Request, context: { params: { id: string } }) {
 
           // Save both messages to database
           await prisma.message.create({
-            data: { conversationId, content: message, role: MessageRole.user },
+            data: { 
+              conversationId, 
+              content: message, 
+              role: MessageRole.user,
+              image,
+            },
           });
           await prisma.message.create({
             data: {

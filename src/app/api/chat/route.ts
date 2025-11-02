@@ -8,9 +8,20 @@ import { RedisStore } from '@/lib/ai/InMeomeryStore';
 
 const store = RedisStore.getInstance();
 
+// Updated schema to include optional image
+const CreateChatWithImageSchema = CreateChatSchema.extend({
+  image: z.string().optional(), // base64 data URL
+});
+
 // Function to generate a title from the first message
-const generateChatTitle = (message: string) => {
-  const maxLength = 50; // Maximum length for title
+const generateChatTitle = (message: string, hasImage: boolean) => {
+  const maxLength = 50;
+  if (hasImage && !message.trim()) {
+    return "Image analysis";
+  }
+  if (hasImage && message.trim()) {
+    return `Image: ${message.length > maxLength ? message.substring(0, maxLength - 3) + '...' : message}`;
+  }
   return message.length > maxLength 
     ? `${message.substring(0, maxLength - 3)}...`
     : message;
@@ -59,6 +70,7 @@ export async function GET(req: Request) {
             id: msg.id || null,
             content: msg.content,
             role: msg.role,
+            image: msg.image || undefined,
             createdAt: new Date(msg.timestamp || new Date()),
           })),
         };
@@ -85,13 +97,13 @@ export async function POST(req: Request) {
   try {
     const session = await getAuthSession();
     const body = await req.json();
-    const { message, model } = CreateChatSchema.parse(body);
+    const { message, model, image } = CreateChatWithImageSchema.parse(body);
     
     // Create conversation with a title
     const conversation = await prisma.conversation.create({
       data: { 
         userId: session.user.id,
-        title: generateChatTitle(message),
+        title: generateChatTitle(message, !!image),
       },
     });
     
@@ -101,6 +113,7 @@ export async function POST(req: Request) {
       content: message,
       role: MessageRole.user,
       timestamp: new Date().toISOString(),
+      image,
     });
     
     console.log('[DEBUG] New conversation messages count:', messages.length);
@@ -112,6 +125,7 @@ export async function POST(req: Request) {
       ...messages.map((msg) => ({
         role: msg.role,
         content: msg.content,
+        image: msg.image,
       })),
     ];
     
@@ -142,7 +156,12 @@ export async function POST(req: Request) {
           
           // Save both messages to database
           await prisma.message.create({
-            data: { conversationId, content: message, role: MessageRole.user },
+            data: { 
+              conversationId, 
+              content: message, 
+              role: MessageRole.user,
+              image,
+            },
           });
           await prisma.message.create({
             data: {

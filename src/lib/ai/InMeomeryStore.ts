@@ -19,7 +19,7 @@ export class RedisStore {
 
   async add(conversationId: string, message: Message): Promise<Message[]> {
     const key = `chat:${conversationId}`;
-    console.log(`[RedisStore] Adding message to conversation: ${conversationId}, role: ${message.role}`);
+    console.log(`[RedisStore] Adding message to conversation: ${conversationId}, role: ${message.role}, hasImage: ${!!message.image}`);
     
     // Get existing messages from cache only (don't reload from DB)
     const cached = await redis.get(key);
@@ -41,6 +41,7 @@ export class RedisStore {
         content: m.content,
         role: m.role,
         timestamp: m.createdAt.toISOString(),
+        image: m.image || undefined,
       }));
       console.log(`[RedisStore] Loaded ${messages.length} messages from database`);
     }
@@ -86,6 +87,7 @@ export class RedisStore {
       content: m.content,
       role: m.role,
       timestamp: m.createdAt.toISOString(),
+      image: m.image || undefined,
     }));
     
     // Cache in Redis

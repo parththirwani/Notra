@@ -3,13 +3,27 @@ import { MessageRole } from "@prisma/client";
 
 type OpenRouterRole = "system" | "user" | "assistant";
 
+interface TextContent {
+  type: "text";
+  text: string;
+}
+
+interface ImageContent {
+  type: "image_url";
+  image_url: {
+    url: string;
+  };
+}
+
+type MessageContent = string | (TextContent | ImageContent)[];
+
 interface OpenRouterMessage {
   role: OpenRouterRole;
-  content: string;
+  content: MessageContent;
 }
 
 export async function createCompletion(
-  messages: { role: MessageRole; content: string }[],
+  messages: { role: MessageRole; content: string; image?: string }[],
   model: MODEL,
   onChunk: (chunk: string) => void
 ): Promise<void> {
@@ -17,10 +31,39 @@ export async function createCompletion(
     throw new Error("OPENROUTER_API_KEY is not set");
   }
 
-  const openRouterMessages: OpenRouterMessage[] = messages.map(msg => ({
-    role: msg.role as OpenRouterRole, 
-    content: msg.content,
-  }));
+  const openRouterMessages: OpenRouterMessage[] = messages.map(msg => {
+    // If message has an image, use multimodal content format
+    if (msg.image) {
+      const content: (TextContent | ImageContent)[] = [];
+      
+      // Add text if present
+      if (msg.content) {
+        content.push({
+          type: "text",
+          text: msg.content,
+        });
+      }
+      
+      // Add image
+      content.push({
+        type: "image_url",
+        image_url: {
+          url: msg.image,
+        },
+      });
+      
+      return {
+        role: msg.role as OpenRouterRole,
+        content,
+      };
+    }
+    
+    // Standard text-only message
+    return {
+      role: msg.role as OpenRouterRole,
+      content: msg.content,
+    };
+  });
 
   const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
@@ -79,16 +122,46 @@ export async function createCompletion(
 }
 
 export async function createCompletionOnce(
-  messages: { role: MessageRole; content: string }[],
+  messages: { role: MessageRole; content: string; image?: string }[],
   model: MODEL
 ): Promise<string> {
   if (!process.env.OPENROUTER_KEY) {
     throw new Error("OPENROUTER_API_KEY is not set");
   }
-  const openRouterMessages: OpenRouterMessage[] = messages.map(msg => ({
-    role: msg.role as OpenRouterRole, 
-    content: msg.content,
-  }));
+
+  const openRouterMessages: OpenRouterMessage[] = messages.map(msg => {
+    // If message has an image, use multimodal content format
+    if (msg.image) {
+      const content: (TextContent | ImageContent)[] = [];
+      
+      // Add text if present
+      if (msg.content) {
+        content.push({
+          type: "text",
+          text: msg.content,
+        });
+      }
+      
+      // Add image
+      content.push({
+        type: "image_url",
+        image_url: {
+          url: msg.image,
+        },
+      });
+      
+      return {
+        role: msg.role as OpenRouterRole,
+        content,
+      };
+    }
+    
+    // Standard text-only message
+    return {
+      role: msg.role as OpenRouterRole,
+      content: msg.content,
+    };
+  });
 
   const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
