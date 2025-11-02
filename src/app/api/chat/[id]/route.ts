@@ -8,27 +8,23 @@ import { RedisStore } from '@/lib/ai/InMeomeryStore';
 
 const store = RedisStore.getInstance();
 
-// Updated schema to include optional image
 const CreateChatWithImageSchema = CreateChatSchema.extend({
-  image: z.string().optional(), // base64 data URL
+  image: z.string().optional(),
 });
 
 function detectInteractiveIntent(input: string): { type: 'quiz' | 'mcq' | 'flashcard' | null } {
   const text = input.toLowerCase();
   
-  // Check for quiz intent (multiple questions)
   if (/(quiz|practice\s*(quiz|questions?)|5\s*questions?|multiple\s*questions?)/i.test(text)) {
     console.log('[DEBUG] Detected QUIZ intent for:', text);
     return { type: 'quiz' };
   }
   
-  // Check for single MCQ intent
   if (/(mcq|mcw|multiple\s*choice|single\s*question)/i.test(text)) {
     console.log('[DEBUG] Detected MCQ intent for:', text);
     return { type: 'mcq' };
   }
   
-  // Check for flashcard intent
   if (/(flash\s*card|flashcard)/i.test(text)) {
     console.log('[DEBUG] Detected FLASHCARD intent for:', text);
     return { type: 'flashcard' };
@@ -113,13 +109,24 @@ Rules:
   return '';
 }
 
+// System message that identifies the model as Qwen 7B
+const SYSTEM_IDENTITY = {
+  role: MessageRole.system,
+  content: [
+    'You are Qwen 7B, an AI assistant.',
+    'IMPORTANT: When users ask "what model are you?", "who are you?", "what AI are you?", or similar questions, always respond: "I am Qwen 7B model."',
+    'When users ask who created you, respond: "I am Qwen 7B, developed by the Alibaba Cloud team."',
+    'Never mention OpenAI, ChatGPT, GPT-4, or any other model names.',
+    'Be helpful, accurate, and concise in your responses.',
+  ].join('\n')
+};
+
 export async function GET(req: Request, context: { params: { id: string } }) {
   const prisma = new PrismaClient();
   try {
     const session = await getAuthSession();
     const { id: conversationId } = await context.params;
 
-    // Fetch the conversation
     const conversation = await prisma.conversation.findUnique({
       where: { id: conversationId },
     });
@@ -128,11 +135,9 @@ export async function GET(req: Request, context: { params: { id: string } }) {
       return NextResponse.json({ error: 'Conversation not found or unauthorized' }, { status: 404 });
     }
 
-    // Get messages from Redis cache first, then fallback to database
     let messages = await store.get(conversationId);
     
     if (messages.length === 0) {
-      // Fallback to database if Redis is empty
       const dbMessages = await prisma.message.findMany({
         where: { conversationId },
         orderBy: { createdAt: 'asc' },
@@ -183,7 +188,6 @@ export async function POST(req: Request, context: { params: { id: string } }) {
     const body = await req.json();
     const { message, model, image } = CreateChatWithImageSchema.parse(body);
 
-    // Verify conversation ownership
     const conversation = await prisma.conversation.findUnique({
       where: { id: conversationId },
     });
@@ -192,7 +196,6 @@ export async function POST(req: Request, context: { params: { id: string } }) {
       return NextResponse.json({ error: 'Conversation not found or unauthorized' }, { status: 404 });
     }
 
-    // Add user message to cache
     const messages = await store.add(conversationId, {
       content: message,
       role: MessageRole.user,
@@ -202,9 +205,11 @@ export async function POST(req: Request, context: { params: { id: string } }) {
 
     console.log('[DEBUG] Existing conversation messages count:', messages.length);
 
-    // Build messages for OpenRouter, optionally prepend a system formatting instruction
     const intent = detectInteractiveIntent(message);
+    
+    // Build messages with system identity first
     const openRouterMessages = [
+      SYSTEM_IDENTITY, // Always include identity
       ...(intent.type ? [{ role: MessageRole.system, content: getFormattingInstruction(intent.type) }] : []),
       ...messages.map((msg) => ({
         role: msg.role,
@@ -228,14 +233,12 @@ export async function POST(req: Request, context: { params: { id: string } }) {
 
           console.log('[DEBUG] Full assistant response:', fullAssistantContent);
 
-          // Add assistant message to cache
           await store.add(conversationId, {
             content: fullAssistantContent,
             role: MessageRole.assistant,
             timestamp: new Date().toISOString(),
           });
 
-          // Save both messages to database
           await prisma.message.create({
             data: { 
               conversationId, 
@@ -252,10 +255,8 @@ export async function POST(req: Request, context: { params: { id: string } }) {
             },
           });
 
-          // Clear Redis cache to ensure consistency
           await store.delete(conversationId);
 
-          // Send completion message
           controller.enqueue(encoder.encode(`data: [DONE]\n\n`));
         } catch (err) {
           controller.error(err);
@@ -292,7 +293,6 @@ export async function DELETE(req: Request, context: { params: { id: string } }) 
     const session = await getAuthSession();
     const { id: conversationId } = await context.params;
 
-    // Verify conversation ownership
     const conversation = await prisma.conversation.findUnique({
       where: { id: conversationId },
     });
@@ -301,7 +301,6 @@ export async function DELETE(req: Request, context: { params: { id: string } }) 
       return NextResponse.json({ error: 'Conversation not found or unauthorized' }, { status: 404 });
     }
 
-    // Delete from database
     await prisma.message.deleteMany({
       where: { conversationId },
     });
@@ -309,7 +308,6 @@ export async function DELETE(req: Request, context: { params: { id: string } }) 
       where: { id: conversationId },
     });
 
-    // Clear from Redis cache
     await store.delete(conversationId);
 
     return NextResponse.json({ success: true }, { status: 200 });
