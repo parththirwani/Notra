@@ -37,7 +37,8 @@ const MCQ_SCHEMA = {
           text: { type: "string" },
           correct: { type: "boolean" }
         },
-        required: ["text", "correct"]
+        required: ["text", "correct"],
+        additionalProperties: false
       },
       minItems: 4,
       maxItems: 4
@@ -77,13 +78,15 @@ const QUIZ_SCHEMA = {
                 text: { type: "string" },
                 correct: { type: "boolean" }
               },
-              required: ["text", "correct"]
+              required: ["text", "correct"],
+              additionalProperties: false
             },
             minItems: 4,
             maxItems: 4
           }
         },
-        required: ["question", "options"]
+        required: ["question", "options"],
+        additionalProperties: false
       },
       minItems: 5,
       maxItems: 5
