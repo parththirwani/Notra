@@ -1,4 +1,3 @@
-
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createCompletion } from '@/lib/ai/openrouter';
@@ -7,7 +6,7 @@ import { CreateChatSchema } from '@/types/chat';
 import { RedisStore } from '@/lib/ai/InMeomeryStore';
 import { MessageRole, PrismaClient } from '@prisma/client';
 import { prisma } from '@/lib/prisma/client';
-
+import { SYSTEM_PROMPT, SECURITY_POLICY, MODEL_IDENTITY_PROMPT } from '@/lib/systemPrompt';
 
 const store = RedisStore.getInstance();
 
@@ -47,15 +46,15 @@ function getFormattingInstruction(): string {
   ].join('\n');
 }
 
-// System message that identifies the model
-const SYSTEM_IDENTITY = {
+// Updated system message that combines security policy and system prompt
+const COMBINED_SYSTEM_MESSAGE = {
   role: MessageRole.system,
   content: [
-    'You are Qwen 7B, an AI assistant.',
-    'IMPORTANT: When users ask "what model are you?", "who are you?", "what AI are you?", or similar questions, always respond: "I am Qwen 7B model."',
-    'When users ask who created you, respond: "I am Qwen 7B, developed by the Alibaba Cloud team."',
-    'Never mention OpenAI, ChatGPT, GPT-4, or any other model names.',
-    'Be helpful, accurate, and concise in your responses.',
+    SECURITY_POLICY,
+    '',
+    SYSTEM_PROMPT,
+    '',
+    MODEL_IDENTITY_PROMPT,
   ].join('\n')
 };
 
@@ -83,9 +82,9 @@ export async function POST(req: Request) {
     
     const shouldFormat = detectInteractiveIntent(message);
     
-    // Build messages with system identity first
+    // Build messages with combined system prompt
     const openRouterMessages = [
-      SYSTEM_IDENTITY, // Always include identity
+      COMBINED_SYSTEM_MESSAGE, // Security policy + system prompt + model identity
       ...(shouldFormat ? [{ role: MessageRole.system, content: getFormattingInstruction() }] : []),
       ...messages.map((msg) => ({
         role: msg.role,
