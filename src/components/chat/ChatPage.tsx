@@ -17,6 +17,9 @@ type Subject = {
 	isActive: boolean;
 };
 
+interface MessageWithTimestamp extends Message {
+	createdAt?: string;
+}
 
 const API_BASE = "/api/chat";
 
@@ -34,7 +37,7 @@ const ChatPage = () => {
 			const res = await fetch(API_BASE, { method: "GET" });
 			if (!res.ok) return;
 			const data = await res.json();
-			const conversations: Array<{ id: string; title: string; createdAt: string; messages: Message[] }>= data.conversations ?? [];
+			const conversations: Array<{ id: string; title: string; createdAt: string; messages: MessageWithTimestamp[] }> = data.conversations ?? [];
 
 			// Normalize messages: ensure role, id, timestamp strings
 			const normalizedSubjects: Subject[] = conversations.map((c) => ({
@@ -48,7 +51,7 @@ const ChatPage = () => {
 					id: m.id ?? `${idx}`,
 					content: m.content,
 					role: m.role,
-					timestamp: typeof m.timestamp === "string" ? m.timestamp : (m as any).createdAt ? new Date((m as any).createdAt).toISOString() : undefined,
+					timestamp: typeof m.timestamp === "string" ? m.timestamp : m.createdAt ? new Date(m.createdAt).toISOString() : undefined,
 					image: m.image,
 				}));
 			}
@@ -110,7 +113,8 @@ const ChatPage = () => {
 		} finally {
 			setSubjects((prev) => prev.filter((s) => s.id !== id));
 			setMessagesByConversation((prev) => {
-				const { [id]: _, ...rest } = prev;
+				// eslint-disable-next-line @typescript-eslint/no-unused-vars
+				const { [id]: _deleted, ...rest } = prev;
 				return rest;
 			});
 			if (currentSubjectId === id) {

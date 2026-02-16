@@ -44,7 +44,7 @@ const CTA = () => {
             
             {/* Supporting text */}
             <p className="mt-4 text-gray-600 leading-relaxed">
-              Join thousands of STEM students who've transformed their study routine. 
+              Join thousands of STEM students who&apos;ve transformed their study routine. 
               Create your first subject room and start generating practice materials in under 60 seconds.
             </p>
             

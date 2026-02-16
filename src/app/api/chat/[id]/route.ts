@@ -1,4 +1,4 @@
-import { PrismaClient, MessageRole } from '@prisma/client';
+import { MessageRole } from '@prisma/client';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createCompletion } from '@/lib/ai/openrouter';
@@ -6,7 +6,7 @@ import { getAuthSession } from '@/lib/authSession';
 import { CreateChatSchema } from '@/types/chat';
 import { RedisStore } from '@/lib/ai/InMeomeryStore';
 import { prisma } from '@/lib/prisma/client';
-import { SYSTEM_PROMPT, SECURITY_POLICY, MODEL_IDENTITY_PROMPT } from '@/lib/systemPrompt';
+import { SYSTEM_PROMPT, SECURITY_POLICY, MODEL_IDENTITY_PROMPT } from '@/lib/prompts/systemPrompts';
 
 const store = RedisStore.getInstance();
 
@@ -123,10 +123,13 @@ const COMBINED_SYSTEM_MESSAGE = {
   ].join('\n')
 };
 
-export async function GET(req: Request, context: { params: { id: string } }) {
+export async function GET(
+  req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
   try {
     const session = await getAuthSession();
-    const { id: conversationId } = await context.params;
+    const { id: conversationId } = await params;
 
     const conversation = await prisma.conversation.findUnique({
       where: { id: conversationId },
@@ -181,10 +184,13 @@ export async function GET(req: Request, context: { params: { id: string } }) {
   }
 }
 
-export async function POST(req: Request, context: { params: { id: string } }) {
+export async function POST(
+  req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
   try {
     const session = await getAuthSession();
-    const { id: conversationId } = await context.params;
+    const { id: conversationId } = await params;
     const body = await req.json();
     const { message, model, image } = CreateChatWithImageSchema.parse(body);
 
@@ -226,7 +232,7 @@ export async function POST(req: Request, context: { params: { id: string } }) {
       async start(controller) {
         let fullAssistantContent = '';
         try {
-          await createCompletion(openRouterMessages as any, model, (chunk: string) => {
+          await createCompletion(openRouterMessages, model, (chunk: string) => {
             fullAssistantContent += chunk;
             controller.enqueue(encoder.encode(`data: ${chunk}\n\n`));
           });
@@ -287,10 +293,13 @@ export async function POST(req: Request, context: { params: { id: string } }) {
   }
 }
 
-export async function DELETE(req: Request, context: { params: { id: string } }) {
+export async function DELETE(
+  req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
   try {
     const session = await getAuthSession();
-    const { id: conversationId } = await context.params;
+    const { id: conversationId } = await params;
 
     const conversation = await prisma.conversation.findUnique({
       where: { id: conversationId },

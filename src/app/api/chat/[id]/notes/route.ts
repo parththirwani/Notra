@@ -1,321 +1,65 @@
-import { MessageRole } from '@prisma/client';
 import { NextResponse } from 'next/server';
-import { z } from 'zod';
-import { createCompletion } from '@/lib/ai/openrouter';
+import { MessageRole } from '@prisma/client';
 import { getAuthSession } from '@/lib/authSession';
-import { CreateChatSchema } from '@/types/chat';
-import { RedisStore } from '@/lib/ai/InMeomeryStore';
+import { createCompletionOnce } from '@/lib/ai/openrouter';
+import { MODEL, SUPPORTED_MODELS } from '@/types/chat';
 import { prisma } from '@/lib/prisma/client';
-import { SYSTEM_PROMPT, SECURITY_POLICY, MODEL_IDENTITY_PROMPT } from '@/lib/systemPrompt';
+import { NOTES_GENERATION_PROMPT } from '@/lib/prompts/systemPrompts';
 
-const store = RedisStore.getInstance();
-
-const CreateChatWithImageSchema = CreateChatSchema.extend({
-  image: z.string().optional(),
-});
-
-function detectInteractiveIntent(input: string): { type: 'quiz' | 'mcq' | 'flashcard' | null } {
-  const text = input.toLowerCase();
-  
-  if (/(quiz|practice\s*(quiz|questions?)|5\s*questions?|multiple\s*questions?)/i.test(text)) {
-    console.log('[DEBUG] Detected QUIZ intent for:', text);
-    return { type: 'quiz' };
-  }
-  
-  if (/(mcq|mcw|multiple\s*choice|single\s*question)/i.test(text)) {
-    console.log('[DEBUG] Detected MCQ intent for:', text);
-    return { type: 'mcq' };
-  }
-  
-  if (/(flash\s*card|flashcard)/i.test(text)) {
-    console.log('[DEBUG] Detected FLASHCARD intent for:', text);
-    return { type: 'flashcard' };
-  }
-  
-  console.log('[DEBUG] No interactive intent detected for:', text);
-  return { type: null };
-}
-
-function getFormattingInstruction(intentType: 'quiz' | 'mcq' | 'flashcard'): string {
-  if (intentType === 'quiz') {
-    return `You are a quiz generator. Generate a quiz with exactly 5 questions about the requested topic.
-
-CRITICAL: You must respond with ONLY a valid JSON object. No markdown, no code fences, no additional text.
-
-Required JSON format:
-{
-  "type": "quiz",
-  "title": "Quiz Title Here",
-  "questions": [
-    {
-      "question": "Question text here?",
-      "options": [
-        {"text": "Option A", "correct": false},
-        {"text": "Option B", "correct": true},
-        {"text": "Option C", "correct": false},
-        {"text": "Option D", "correct": false}
-      ]
-    }
-  ]
-}
-
-Rules:
-- Generate exactly 5 questions
-- Each question must have exactly 4 options
-- Mark the correct answer with "correct": true
-- Make questions educational and challenging
-- Respond with ONLY the JSON object, nothing else`;
-  }
-  
-  if (intentType === 'mcq') {
-    return `You are an MCQ generator. Generate a single multiple choice question about the requested topic.
-
-CRITICAL: You must respond with ONLY a valid JSON object. No markdown, no code fences, no additional text.
-
-Required JSON format:
-{
-  "type": "mcq",
-  "question": "Question text here?",
-  "options": [
-    {"text": "Option A", "correct": false},
-    {"text": "Option B", "correct": true},
-    {"text": "Option C", "correct": false},
-    {"text": "Option D", "correct": false}
-  ]
-}
-
-Rules:
-- Generate exactly 1 question with 4 options
-- Mark the correct answer with "correct": true
-- Respond with ONLY the JSON object, nothing else`;
-  }
-  
-  if (intentType === 'flashcard') {
-    return `You are a flashcard generator. Generate a flashcard about the requested topic.
-
-CRITICAL: You must respond with ONLY a valid JSON object. No markdown, no code fences, no additional text.
-
-Required JSON format:
-{
-  "type": "flashcard",
-  "front": "Front side text",
-  "back": "Back side text"
-}
-
-Rules:
-- Create clear front and back content
-- Make it educational and concise
-- Respond with ONLY the JSON object, nothing else`;
-  }
-  
-  return '';
-}
-
-// Updated system message that combines security policy and system prompt
-const COMBINED_SYSTEM_MESSAGE = {
-  role: MessageRole.system,
-  content: [
-    SECURITY_POLICY,
-    '',
-    SYSTEM_PROMPT,
-    '',
-    MODEL_IDENTITY_PROMPT,
-  ].join('\n')
-};
-
-export async function GET(req: Request, context: { params: { id: string } }) {
+export async function POST(
+  req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
   try {
     const session = await getAuthSession();
-    const { id: conversationId } = await context.params;
+    const { id: conversationId } = await params;
+    const { model }: { model?: MODEL } = await req.json().catch(() => ({}));
 
-    const conversation = await prisma.conversation.findUnique({
-      where: { id: conversationId },
+    const conversation = await prisma.conversation.findUnique({ 
+      where: { id: conversationId } 
+    });
+    
+    if (!conversation || conversation.userId !== session.user.id) {
+      return NextResponse.json(
+        { error: 'Conversation not found or unauthorized' }, 
+        { status: 404 }
+      );
+    }
+
+    const messages = await prisma.message.findMany({
+      where: { conversationId },
+      orderBy: { createdAt: 'asc' },
     });
 
-    if (!conversation || conversation.userId !== session.user.id) {
-      return NextResponse.json({ error: 'Conversation not found or unauthorized' }, { status: 404 });
-    }
+    // Build transcript (no image references)
+    const transcript = messages.map((m) => {
+      return `${m.role.toUpperCase()}: ${m.content}`;
+    }).join('\n\n');
 
-    let messages = await store.get(conversationId);
-    
-    if (messages.length === 0) {
-      const dbMessages = await prisma.message.findMany({
-        where: { conversationId },
-        orderBy: { createdAt: 'asc' },
-      });
-      
-      messages = dbMessages.map(msg => ({
-        id: msg.id,
-        content: msg.content,
-        role: msg.role,
-        timestamp: msg.createdAt.toISOString(),
-        image: msg.image || undefined,
-      }));
-    }
-
-    return NextResponse.json(
+    const prompt: Array<{ role: MessageRole; content: string }> = [
       { 
-        conversation: {
-          id: conversation.id,
-          title: conversation.title,
-          createdAt: conversation.createdAt,
-        },
-        messages: messages.map(msg => ({
-          id: msg.id || null,
-          content: msg.content,
-          role: msg.role,
-          image: msg.image,
-          createdAt: new Date(msg.timestamp || new Date()),
-        }))
+        role: MessageRole.system, 
+        content: NOTES_GENERATION_PROMPT
       },
-      { status: 200 }
-    );
-  } catch (error) {
-    console.error(error);
-    if (error instanceof Error && error.message.includes('Unauthorized')) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
-  } finally {
-    await prisma.$disconnect();
-  }
-}
-
-export async function POST(req: Request, context: { params: { id: string } }) {
-  try {
-    const session = await getAuthSession();
-    const { id: conversationId } = await context.params;
-    const body = await req.json();
-    const { message, model, image } = CreateChatWithImageSchema.parse(body);
-
-    const conversation = await prisma.conversation.findUnique({
-      where: { id: conversationId },
-    });
-
-    if (!conversation || conversation.userId !== session.user.id) {
-      return NextResponse.json({ error: 'Conversation not found or unauthorized' }, { status: 404 });
-    }
-
-    const messages = await store.add(conversationId, {
-      content: message,
-      role: MessageRole.user,
-      timestamp: new Date().toISOString(),
-      image,
-    });
-
-    console.log('[DEBUG] Existing conversation messages count:', messages.length);
-
-    const intent = detectInteractiveIntent(message);
-    
-    // Build messages with combined system prompt
-    const openRouterMessages = [
-      COMBINED_SYSTEM_MESSAGE, // Security policy + system prompt + model identity
-      ...(intent.type ? [{ role: MessageRole.system, content: getFormattingInstruction(intent.type) }] : []),
-      ...messages.map((msg) => ({
-        role: msg.role,
-        content: msg.content,
-        image: msg.image,
-      })),
+      { 
+        role: MessageRole.user, 
+        content: `Create study notes for this chat transcript:\n\n${transcript}` 
+      },
     ];
 
-    console.log('[DEBUG] Intent detected:', intent.type);
-    console.log('[DEBUG] System instruction added:', !!intent.type);
+    const chosenModel: MODEL = (model && SUPPORTED_MODELS.includes(model)) 
+      ? model 
+      : 'openai/gpt-4o';
+    
+    const md = await createCompletionOnce(prompt, chosenModel);
 
-    const encoder = new TextEncoder();
-    const stream = new ReadableStream({
-      async start(controller) {
-        let fullAssistantContent = '';
-        try {
-          await createCompletion(openRouterMessages as any, model, (chunk: string) => {
-            fullAssistantContent += chunk;
-            controller.enqueue(encoder.encode(`data: ${chunk}\n\n`));
-          });
-
-          console.log('[DEBUG] Full assistant response:', fullAssistantContent);
-
-          await store.add(conversationId, {
-            content: fullAssistantContent,
-            role: MessageRole.assistant,
-            timestamp: new Date().toISOString(),
-          });
-
-          await prisma.message.create({
-            data: { 
-              conversationId, 
-              content: message, 
-              role: MessageRole.user,
-              image,
-            },
-          });
-          await prisma.message.create({
-            data: {
-              conversationId,
-              content: fullAssistantContent,
-              role: MessageRole.assistant,
-            },
-          });
-
-          await store.delete(conversationId);
-
-          controller.enqueue(encoder.encode(`data: [DONE]\n\n`));
-        } catch (err) {
-          controller.error(err);
-        } finally {
-          controller.close();
-        }
-      },
-    });
-
-    return new Response(stream, {
-      headers: {
-        'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache',
-        'Connection': 'keep-alive',
-      },
-    });
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return NextResponse.json({ error: error.issues }, { status: 400 });
-    }
-    if (error instanceof Error && error.message.includes('Unauthorized')) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-    console.error(error);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
-  } finally {
-    await prisma.$disconnect();
-  }
-}
-
-export async function DELETE(req: Request, context: { params: { id: string } }) {
-  try {
-    const session = await getAuthSession();
-    const { id: conversationId } = await context.params;
-
-    const conversation = await prisma.conversation.findUnique({
-      where: { id: conversationId },
-    });
-
-    if (!conversation || conversation.userId !== session.user.id) {
-      return NextResponse.json({ error: 'Conversation not found or unauthorized' }, { status: 404 });
-    }
-
-    await prisma.message.deleteMany({
-      where: { conversationId },
-    });
-    await prisma.conversation.delete({
-      where: { id: conversationId },
-    });
-
-    await store.delete(conversationId);
-
-    return NextResponse.json({ success: true }, { status: 200 });
-  } catch (error) {
-    console.error(error);
-    if (error instanceof Error && error.message.includes('Unauthorized')) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    return NextResponse.json({ markdown: md }, { status: 200 });
+  } catch (e) {
+    console.error(e);
+    return NextResponse.json(
+      { error: 'Failed to generate notes' }, 
+      { status: 500 }
+    );
   } finally {
     await prisma.$disconnect();
   }

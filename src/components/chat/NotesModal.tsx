@@ -27,8 +27,9 @@ export default function NotesModal({ conversationId, open, onOpenChange }: Notes
 				if (!res.ok) throw new Error("Failed to generate notes");
 				const data = await res.json();
 				if (!aborted) setMarkdown(data.markdown ?? "");
-			} catch (e) {
+			} catch (error) {
 				if (!aborted) setMarkdown("Failed to generate notes. Please try again.");
+				console.error(error)
 			} finally {
 				if (!aborted) setLoading(false);
 			}

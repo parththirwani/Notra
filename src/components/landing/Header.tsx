@@ -4,9 +4,9 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Menu } from "lucide-react";
 import Image from "next/image";
+import Link from "next/link";
 import { useSession, signOut } from "next-auth/react";
 import { SignInModal } from "../auth/signinModal";
-
 
 const Header = () => {
   const [open, setOpen] = useState(false);
@@ -16,7 +16,7 @@ const Header = () => {
     <header className="sticky top-0 z-40 w-full border-b bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <nav className="container mx-auto flex h-14 items-center justify-between px-4">
         {/* Logo */}
-        <a href="/" className="flex items-center gap-2">
+        <Link href="/" className="flex items-center gap-2">
           <div className="relative h-36 w-28">
             <Image
               src="/big-logo.png"
@@ -27,7 +27,7 @@ const Header = () => {
             />
           </div>
           <span className="sr-only">Notra (Notes Ultra)</span>
-        </a>
+        </Link>
 
         {/* Nav links */}
         <div className="hidden items-center gap-6 md:flex">

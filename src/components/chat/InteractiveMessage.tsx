@@ -4,10 +4,12 @@ import MarkdownMessage from "./MarkdownMessage";
 import { Button } from "../ui/button";
 import { CheckCircle2, Circle, XCircle, RotateCcw, ArrowRight, Trophy, Star } from "lucide-react";
 
+type MCQOption = { text: string; correct?: boolean } | string;
+
 type MCQSchemaV1 = {
 	type: "mcq" | "mcw";
 	question: string;
-	options: { text: string; correct?: boolean }[] | string[];
+	options: MCQOption[];
 	multipleCorrect?: boolean;
 };
 
@@ -16,7 +18,7 @@ type QuizSchemaV1 = {
 	title: string;
 	questions: Array<{
 		question: string;
-		options: Array<{ text: string; correct?: boolean } | string>;
+		options: MCQOption[];
 		multipleCorrect?: boolean;
 	}>;
 };
@@ -29,12 +31,12 @@ type FlashcardSchemaV1 = {
 
 type ParsedPayload = MCQSchemaV1 | QuizSchemaV1 | FlashcardSchemaV1;
 
-function isParsedPayload(value: any): value is ParsedPayload {
-	return value && typeof value === "object" && typeof value.type === "string";
+function isParsedPayload(value: unknown): value is ParsedPayload {
+	return value !== null && typeof value === "object" && "type" in value && typeof value.type === "string";
 }
 
 function normalizeMCQ(payload: MCQSchemaV1) {
-	const options = (payload.options as any[]).map((opt) =>
+	const options = payload.options.map((opt) =>
 		typeof opt === "string" ? { text: opt, correct: false } : { text: opt.text, correct: !!opt.correct }
 	);
 	const hasAnyCorrect = options.some((o) => o.correct);
@@ -152,7 +154,7 @@ function QuizCard({ quiz }: { quiz: QuizSchemaV1 }) {
 	const [completed, setCompleted] = useState(false);
 
 	const question = quiz.questions[currentQuestion];
-	const options = (question.options as any[]).map((opt) =>
+	const options = question.options.map((opt) =>
 		typeof opt === "string" ? { text: opt, correct: false } : { text: opt.text, correct: !!opt.correct }
 	);
 	const selected = selectedAnswers[currentQuestion] || [];

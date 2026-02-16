@@ -10,7 +10,7 @@ import { useRouter } from "next/navigation";
 const Hero = () => {
   const ref = useRef<HTMLDivElement>(null);
   const [showSignInModal, setShowSignInModal] = useState(false);
-  const { data: session, status } = useSession();
+  const { status } = useSession();
   const router = useRouter();
 
   useEffect(() => {

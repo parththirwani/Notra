@@ -136,61 +136,80 @@ const MarkdownMessage = ({ content, isDark }: MarkdownMessageProps) => {
 				rehypePlugins={[rehypeKatex, rehypeHighlight]}
 				components={{
 					// Headers
+					// eslint-disable-next-line @typescript-eslint/no-unused-vars
 					h1: ({ node, ...props }) => (
 						<h1 className="text-[1.15rem] font-semibold mt-3 mb-2 first:mt-0 border-b border-gray-600/20 pb-1" {...props} />
 					),
+					// eslint-disable-next-line @typescript-eslint/no-unused-vars
 					h2: ({ node, ...props }) => (
 						<h2 className="text-[1.05rem] font-semibold mt-2.5 mb-1.5 first:mt-0" {...props} />
 					),
+					// eslint-disable-next-line @typescript-eslint/no-unused-vars
 					h3: ({ node, ...props }) => (
 						<h3 className="text-[1rem] font-semibold mt-2 mb-1 first:mt-0" {...props} />
 					),
 					// Paragraphs
+					// eslint-disable-next-line @typescript-eslint/no-unused-vars
 					p: ({ node, ...props }) => (
 						<p className="mb-2 leading-relaxed last:mb-0" {...props} />
 					),
+					// eslint-disable-next-line @typescript-eslint/no-unused-vars
 					strong: ({ node, ...props }) => (
 						<strong className="font-semibold" {...props} />
 					),
+					// eslint-disable-next-line @typescript-eslint/no-unused-vars
 					em: ({ node, ...props }) => <em className="italic opacity-90" {...props} />,
 					// Lists
+					// eslint-disable-next-line @typescript-eslint/no-unused-vars
 					ul: ({ node, ...props }) => (
 						<ul className="my-1 space-y-0.5 ml-5 list-disc" {...props} />
 					),
+					// eslint-disable-next-line @typescript-eslint/no-unused-vars
 					ol: ({ node, ...props }) => (
 						<ol className="my-1 space-y-0.5 ml-5 list-decimal" {...props} />
 					),
+					// eslint-disable-next-line @typescript-eslint/no-unused-vars
 					li: ({ node, ...props }) => <li className="leading-relaxed" {...props} />,
 					// Code (inline and block)
 					code: ({ className, children, ...props }) => (
 						codeRenderer({ className, children, props })
 					),
+					// eslint-disable-next-line @typescript-eslint/no-unused-vars
 					pre: ({ node, ...props }) => (
 						<pre className="bg-black/80 text-white text-xs rounded-md p-3 overflow-x-auto my-2 border border-white/10" {...props} />
 					),
 					// Tables
+					// eslint-disable-next-line @typescript-eslint/no-unused-vars
 					table: ({ node, ...props }) => (
 						<table className="w-full border-collapse my-3 text-sm" {...props} />
 					),
+					// eslint-disable-next-line @typescript-eslint/no-unused-vars
 					thead: ({ node, ...props }) => <thead className="bg-black/10" {...props} />,
+					// eslint-disable-next-line @typescript-eslint/no-unused-vars
 					tbody: ({ node, ...props }) => <tbody {...props} />,
+					// eslint-disable-next-line @typescript-eslint/no-unused-vars
 					tr: ({ node, ...props }) => <tr className="hover:bg-black/5 dark:hover:bg-white/5" {...props} />,
+					// eslint-disable-next-line @typescript-eslint/no-unused-vars
 					th: ({ node, ...props }) => (
 						<th className="border px-3 py-2 font-semibold" {...props} />
 					),
+					// eslint-disable-next-line @typescript-eslint/no-unused-vars
 					td: ({ node, ...props }) => (
 						<td className="border px-3 py-2 align-top" {...props} />
 					),
 					// Links
+					// eslint-disable-next-line @typescript-eslint/no-unused-vars
 					a: ({ node, ...props }) => (
 						<a className="underline underline-offset-2 hover:opacity-90" target="_blank" rel="noreferrer" {...props} />
 					),
 					// Quotes
+					// eslint-disable-next-line @typescript-eslint/no-unused-vars
 					blockquote: ({ node, ...props }) => (
 						<blockquote className="border-l-4 pl-3 italic opacity-90 my-2" {...props} />
 					),
 					// Horizontal rule
-					hr: (props) => <hr className="border-t my-3 opacity-30" {...props} />,
+					// eslint-disable-next-line @typescript-eslint/no-unused-vars
+					hr: ({ node, ...props }) => <hr className="border-t my-3 opacity-30" {...props} />,
 				}}
 			>
 				{prepared}
@@ -199,7 +218,7 @@ const MarkdownMessage = ({ content, isDark }: MarkdownMessageProps) => {
 	);
 };
 
-function codeRenderer({ className, children, props }: { className?: string; children: React.ReactNode; props: any; }) {
+function codeRenderer({ className, children, props }: { className?: string; children: React.ReactNode; props: Record<string, unknown>; }) {
 	const isBlock = !!(className && className.includes("language-"));
 	if (!isBlock) {
 		return (

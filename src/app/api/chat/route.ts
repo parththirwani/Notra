@@ -4,9 +4,9 @@ import { createCompletion } from '@/lib/ai/openrouter';
 import { getAuthSession } from '@/lib/authSession';
 import { CreateChatSchema } from '@/types/chat';
 import { RedisStore } from '@/lib/ai/InMeomeryStore';
-import { MessageRole, PrismaClient } from '@prisma/client';
+import { MessageRole } from '@prisma/client';
 import { prisma } from '@/lib/prisma/client';
-import { SYSTEM_PROMPT, SECURITY_POLICY, MODEL_IDENTITY_PROMPT } from '@/lib/systemPrompt';
+import { SYSTEM_PROMPT, SECURITY_POLICY, MODEL_IDENTITY_PROMPT } from '@/lib/prompts/systemPrompts';
 
 const store = RedisStore.getInstance();
 
@@ -105,7 +105,7 @@ export async function POST(req: Request) {
             })}\n\n`)
           );
           
-          await createCompletion(openRouterMessages as any, model, (chunk: string) => {
+          await createCompletion(openRouterMessages, model, (chunk: string) => {
             fullAssistantContent += chunk;
             controller.enqueue(encoder.encode(`data: ${chunk}\n\n`));
           });
