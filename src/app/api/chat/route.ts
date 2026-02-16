@@ -1,12 +1,12 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-import { createCompletion } from '@/lib/ai/openrouter';
 import { getAuthSession } from '@/lib/authSession';
 import { CreateChatSchema } from '@/types/chat';
-import { RedisStore } from '@/lib/ai/InMeomeryStore';
 import { MessageRole } from '@prisma/client';
 import { prisma } from '@/lib/prisma/client';
 import { SYSTEM_PROMPT, SECURITY_POLICY, MODEL_IDENTITY_PROMPT } from '@/lib/prompts/systemPrompts';
+import { RedisStore } from '@/store/upstash';
+import { createCompletion } from '@/lib/ai/openrouter';
 
 const store = RedisStore.getInstance();
 
@@ -27,26 +27,52 @@ const generateChatTitle = (message: string, hasImage: boolean) => {
     : message;
 };
 
-function detectInteractiveIntent(input: string): boolean {
+function detectInteractiveIntent(input: string): { type: 'quiz' | 'mcq' | 'flashcard' | null } {
   const text = input.toLowerCase();
-  return /(mcq|mcw|multiple\s*choice|flash\s*card|flashcard|practice\s*(quiz|question|mcq))/i.test(text);
+  
+  if (/(quiz|practice\s*(quiz|questions?)|5\s*questions?|multiple\s*questions?)/i.test(text)) {
+    return { type: 'quiz' };
+  }
+  
+  if (/(mcq|mcw|multiple\s*choice|single\s*question)/i.test(text)) {
+    return { type: 'mcq' };
+  }
+  
+  if (/(flash\s*card|flashcard)/i.test(text)) {
+    return { type: 'flashcard' };
+  }
+  
+  return { type: null };
 }
 
-function getFormattingInstruction(): string {
-  return [
-    'You are an API message formatter. If and only if the user requests MCQ/MCW/flashcard practice, respond with a SINGLE JSON object and nothing else.',
-    'Do NOT wrap in markdown code fences, do NOT add any prose before or after. No newlines before/after the JSON.',
-    'Supported schemas:',
-    '{ "type": "mcq", "question": string, "options": Array< { "text": string, "correct"?: boolean } | string >, "multipleCorrect"?: boolean }',
-    '{ "type": "flashcard", "front": string, "back": string }',
-    'Rules:',
-    '- For MCQ, include "correct": true on the correct options when answers are known; omit otherwise.',
-    '- Use "type": "mcw" interchangeably with "mcq" when the user says MCW.',
-    '- Keep text concise; avoid excessive formatting or extra fields.',
-  ].join('\n');
+function getFormattingInstruction(intentType: 'quiz' | 'mcq' | 'flashcard'): string {
+  if (intentType === 'quiz') {
+    return `Generate a quiz with exactly 5 multiple choice questions about the requested topic.
+
+Each question must have exactly 4 options, with one marked as correct.
+
+The response will be automatically formatted as a structured JSON object.`;
+  }
+  
+  if (intentType === 'mcq') {
+    return `Generate a single multiple choice question about the requested topic.
+
+The question must have exactly 4 options, with one marked as correct.
+
+The response will be automatically formatted as a structured JSON object.`;
+  }
+  
+  if (intentType === 'flashcard') {
+    return `Generate a flashcard about the requested topic.
+
+Create clear front and back content that is educational and concise.
+
+The response will be automatically formatted as a structured JSON object.`;
+  }
+  
+  return '';
 }
 
-// Updated system message that combines security policy and system prompt
 const COMBINED_SYSTEM_MESSAGE = {
   role: MessageRole.system,
   content: [
@@ -80,12 +106,11 @@ export async function POST(req: Request) {
       image,
     });
     
-    const shouldFormat = detectInteractiveIntent(message);
+    const intent = detectInteractiveIntent(message);
     
-    // Build messages with combined system prompt
     const openRouterMessages = [
-      COMBINED_SYSTEM_MESSAGE, // Security policy + system prompt + model identity
-      ...(shouldFormat ? [{ role: MessageRole.system, content: getFormattingInstruction() }] : []),
+      COMBINED_SYSTEM_MESSAGE,
+      ...(intent.type ? [{ role: MessageRole.system, content: getFormattingInstruction(intent.type) }] : []),
       ...messages.map((msg) => ({
         role: msg.role,
         content: msg.content,
@@ -105,10 +130,16 @@ export async function POST(req: Request) {
             })}\n\n`)
           );
           
-          await createCompletion(openRouterMessages, model, (chunk: string) => {
-            fullAssistantContent += chunk;
-            controller.enqueue(encoder.encode(`data: ${chunk}\n\n`));
-          });
+          // Use structured output if intent detected
+          await createCompletion(
+            openRouterMessages, 
+            model, 
+            (chunk: string) => {
+              fullAssistantContent += chunk;
+              controller.enqueue(encoder.encode(`data: ${chunk}\n\n`));
+            },
+            intent.type || undefined
+          );
           
           await store.add(conversationId, {
             content: fullAssistantContent,

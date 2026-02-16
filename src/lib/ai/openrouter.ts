@@ -1,3 +1,4 @@
+
 import { MODEL } from "@/types/chat";
 import { MessageRole } from "@prisma/client";
 
@@ -22,48 +23,133 @@ interface OpenRouterMessage {
   content: MessageContent;
 }
 
+// Structured output schemas
+const MCQ_SCHEMA = {
+  type: "object",
+  properties: {
+    type: { type: "string", enum: ["mcq"] },
+    question: { type: "string" },
+    options: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          text: { type: "string" },
+          correct: { type: "boolean" }
+        },
+        required: ["text", "correct"]
+      },
+      minItems: 4,
+      maxItems: 4
+    }
+  },
+  required: ["type", "question", "options"],
+  additionalProperties: false
+};
+
+const FLASHCARD_SCHEMA = {
+  type: "object",
+  properties: {
+    type: { type: "string", enum: ["flashcard"] },
+    front: { type: "string" },
+    back: { type: "string" }
+  },
+  required: ["type", "front", "back"],
+  additionalProperties: false
+};
+
+const QUIZ_SCHEMA = {
+  type: "object",
+  properties: {
+    type: { type: "string", enum: ["quiz"] },
+    title: { type: "string" },
+    questions: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          question: { type: "string" },
+          options: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                text: { type: "string" },
+                correct: { type: "boolean" }
+              },
+              required: ["text", "correct"]
+            },
+            minItems: 4,
+            maxItems: 4
+          }
+        },
+        required: ["question", "options"]
+      },
+      minItems: 5,
+      maxItems: 5
+    }
+  },
+  required: ["type", "title", "questions"],
+  additionalProperties: false
+};
+
 export async function createCompletion(
   messages: { role: MessageRole; content: string; image?: string }[],
   model: MODEL,
-  onChunk: (chunk: string) => void
+  onChunk: (chunk: string) => void,
+  responseFormat?: "mcq" | "flashcard" | "quiz"
 ): Promise<void> {
   if (!process.env.OPENROUTER_KEY) {
     throw new Error("OPENROUTER_API_KEY is not set");
   }
 
   const openRouterMessages: OpenRouterMessage[] = messages.map((msg) => {
-    // If message has an image, use multimodal content format
     if (msg.image) {
       const content: (TextContent | ImageContent)[] = [];
-
-      // Add text if present
       if (msg.content) {
-        content.push({
-          type: "text",
-          text: msg.content,
-        });
+        content.push({ type: "text", text: msg.content });
       }
-
-      // Add image
       content.push({
         type: "image_url",
-        image_url: {
-          url: msg.image,
-        },
+        image_url: { url: msg.image },
       });
-
-      return {
-        role: msg.role as OpenRouterRole,
-        content,
-      };
+      return { role: msg.role as OpenRouterRole, content };
     }
-
-    // Standard text-only message
     return {
       role: msg.role as OpenRouterRole,
       content: msg.content,
     };
   });
+
+  // Get schema based on response format
+  let responseSchema;
+  if (responseFormat === "mcq") {
+    responseSchema = MCQ_SCHEMA;
+  } else if (responseFormat === "flashcard") {
+    responseSchema = FLASHCARD_SCHEMA;
+  } else if (responseFormat === "quiz") {
+    responseSchema = QUIZ_SCHEMA;
+  }
+
+  const requestBody: any = {
+    model,
+    messages: openRouterMessages,
+    stream: true,
+    temperature: 0.7,
+    max_tokens: 2000,
+  };
+
+  // Add structured output if schema is defined
+  if (responseSchema) {
+    requestBody.response_format = {
+      type: "json_schema",
+      json_schema: {
+        name: responseFormat,
+        strict: true,
+        schema: responseSchema,
+      },
+    };
+  }
 
   const response = await fetch(
     "https://openrouter.ai/api/v1/chat/completions",
@@ -72,14 +158,10 @@ export async function createCompletion(
       headers: {
         Authorization: `Bearer ${process.env.OPENROUTER_KEY}`,
         "Content-Type": "application/json",
+        "HTTP-Referer": process.env.NEXTAUTH_URL || "http://localhost:3000",
+        "X-Title": "Notra",
       },
-      body: JSON.stringify({
-        model,
-        messages: openRouterMessages,
-        stream: true,
-        temperature: 0.7,
-        max_tokens: 1000,
-      }),
+      body: JSON.stringify(requestBody),
     }
   );
 
@@ -126,45 +208,60 @@ export async function createCompletion(
 
 export async function createCompletionOnce(
   messages: { role: MessageRole; content: string; image?: string }[],
-  model: MODEL
+  model: MODEL,
+  responseFormat?: "mcq" | "flashcard" | "quiz"
 ): Promise<string> {
   if (!process.env.OPENROUTER_KEY) {
     throw new Error("OPENROUTER_API_KEY is not set");
   }
 
   const openRouterMessages: OpenRouterMessage[] = messages.map((msg) => {
-    // If message has an image, use multimodal content format
     if (msg.image) {
       const content: (TextContent | ImageContent)[] = [];
-
-      // Add text if present
       if (msg.content) {
-        content.push({
-          type: "text",
-          text: msg.content,
-        });
+        content.push({ type: "text", text: msg.content });
       }
-
-      // Add image
       content.push({
         type: "image_url",
-        image_url: {
-          url: msg.image,
-        },
+        image_url: { url: msg.image },
       });
-
-      return {
-        role: msg.role as OpenRouterRole,
-        content,
-      };
+      return { role: msg.role as OpenRouterRole, content };
     }
-
-    // Standard text-only message
     return {
       role: msg.role as OpenRouterRole,
       content: msg.content,
     };
   });
+
+  // Get schema based on response format
+  let responseSchema;
+  if (responseFormat === "mcq") {
+    responseSchema = MCQ_SCHEMA;
+  } else if (responseFormat === "flashcard") {
+    responseSchema = FLASHCARD_SCHEMA;
+  } else if (responseFormat === "quiz") {
+    responseSchema = QUIZ_SCHEMA;
+  }
+
+  const requestBody: any = {
+    model,
+    messages: openRouterMessages,
+    stream: false,
+    temperature: 0.5,
+    max_tokens: 2000,
+  };
+
+  // Add structured output if schema is defined
+  if (responseSchema) {
+    requestBody.response_format = {
+      type: "json_schema",
+      json_schema: {
+        name: responseFormat,
+        strict: true,
+        schema: responseSchema,
+      },
+    };
+  }
 
   const response = await fetch(
     "https://openrouter.ai/api/v1/chat/completions",
@@ -173,14 +270,10 @@ export async function createCompletionOnce(
       headers: {
         Authorization: `Bearer ${process.env.OPENROUTER_KEY}`,
         "Content-Type": "application/json",
+        "HTTP-Referer": process.env.NEXTAUTH_URL || "http://localhost:3000",
+        "X-Title": "Notra",
       },
-      body: JSON.stringify({
-        model,
-        messages: openRouterMessages,
-        stream: false,
-        temperature: 0.5,
-        max_tokens: 2000,
-      }),
+      body: JSON.stringify(requestBody),
     }
   );
 

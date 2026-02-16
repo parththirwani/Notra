@@ -1,12 +1,12 @@
 import { MessageRole } from '@prisma/client';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-import { createCompletion } from '@/lib/ai/openrouter';
 import { getAuthSession } from '@/lib/authSession';
 import { CreateChatSchema } from '@/types/chat';
-import { RedisStore } from '@/lib/ai/InMeomeryStore';
 import { prisma } from '@/lib/prisma/client';
 import { SYSTEM_PROMPT, SECURITY_POLICY, MODEL_IDENTITY_PROMPT } from '@/lib/prompts/systemPrompts';
+import { RedisStore } from '@/store/upstash';
+import { createCompletion } from '@/lib/ai/openrouter';
 
 const store = RedisStore.getInstance();
 
@@ -18,100 +18,48 @@ function detectInteractiveIntent(input: string): { type: 'quiz' | 'mcq' | 'flash
   const text = input.toLowerCase();
   
   if (/(quiz|practice\s*(quiz|questions?)|5\s*questions?|multiple\s*questions?)/i.test(text)) {
-    console.log('[DEBUG] Detected QUIZ intent for:', text);
     return { type: 'quiz' };
   }
   
   if (/(mcq|mcw|multiple\s*choice|single\s*question)/i.test(text)) {
-    console.log('[DEBUG] Detected MCQ intent for:', text);
     return { type: 'mcq' };
   }
   
   if (/(flash\s*card|flashcard)/i.test(text)) {
-    console.log('[DEBUG] Detected FLASHCARD intent for:', text);
     return { type: 'flashcard' };
   }
   
-  console.log('[DEBUG] No interactive intent detected for:', text);
   return { type: null };
 }
 
 function getFormattingInstruction(intentType: 'quiz' | 'mcq' | 'flashcard'): string {
   if (intentType === 'quiz') {
-    return `You are a quiz generator. Generate a quiz with exactly 5 questions about the requested topic.
+    return `Generate a quiz with exactly 5 multiple choice questions about the requested topic.
 
-CRITICAL: You must respond with ONLY a valid JSON object. No markdown, no code fences, no additional text.
+Each question must have exactly 4 options, with one marked as correct.
 
-Required JSON format:
-{
-  "type": "quiz",
-  "title": "Quiz Title Here",
-  "questions": [
-    {
-      "question": "Question text here?",
-      "options": [
-        {"text": "Option A", "correct": false},
-        {"text": "Option B", "correct": true},
-        {"text": "Option C", "correct": false},
-        {"text": "Option D", "correct": false}
-      ]
-    }
-  ]
-}
-
-Rules:
-- Generate exactly 5 questions
-- Each question must have exactly 4 options
-- Mark the correct answer with "correct": true
-- Make questions educational and challenging
-- Respond with ONLY the JSON object, nothing else`;
+The response will be automatically formatted as a structured JSON object.`;
   }
   
   if (intentType === 'mcq') {
-    return `You are an MCQ generator. Generate a single multiple choice question about the requested topic.
+    return `Generate a single multiple choice question about the requested topic.
 
-CRITICAL: You must respond with ONLY a valid JSON object. No markdown, no code fences, no additional text.
+The question must have exactly 4 options, with one marked as correct.
 
-Required JSON format:
-{
-  "type": "mcq",
-  "question": "Question text here?",
-  "options": [
-    {"text": "Option A", "correct": false},
-    {"text": "Option B", "correct": true},
-    {"text": "Option C", "correct": false},
-    {"text": "Option D", "correct": false}
-  ]
-}
-
-Rules:
-- Generate exactly 1 question with 4 options
-- Mark the correct answer with "correct": true
-- Respond with ONLY the JSON object, nothing else`;
+The response will be automatically formatted as a structured JSON object.`;
   }
   
   if (intentType === 'flashcard') {
-    return `You are a flashcard generator. Generate a flashcard about the requested topic.
+    return `Generate a flashcard about the requested topic.
 
-CRITICAL: You must respond with ONLY a valid JSON object. No markdown, no code fences, no additional text.
+Create clear front and back content that is educational and concise.
 
-Required JSON format:
-{
-  "type": "flashcard",
-  "front": "Front side text",
-  "back": "Back side text"
-}
-
-Rules:
-- Create clear front and back content
-- Make it educational and concise
-- Respond with ONLY the JSON object, nothing else`;
+The response will be automatically formatted as a structured JSON object.`;
   }
   
   return '';
 }
 
-// Updated system message that combines security policy and system prompt
 const COMBINED_SYSTEM_MESSAGE = {
   role: MessageRole.system,
   content: [
@@ -209,13 +157,10 @@ export async function POST(
       image,
     });
 
-    console.log('[DEBUG] Existing conversation messages count:', messages.length);
-
     const intent = detectInteractiveIntent(message);
     
-    // Build messages with combined system prompt
     const openRouterMessages = [
-      COMBINED_SYSTEM_MESSAGE, // Security policy + system prompt + model identity
+      COMBINED_SYSTEM_MESSAGE,
       ...(intent.type ? [{ role: MessageRole.system, content: getFormattingInstruction(intent.type) }] : []),
       ...messages.map((msg) => ({
         role: msg.role,
@@ -224,20 +169,21 @@ export async function POST(
       })),
     ];
 
-    console.log('[DEBUG] Intent detected:', intent.type);
-    console.log('[DEBUG] System instruction added:', !!intent.type);
-
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
       async start(controller) {
         let fullAssistantContent = '';
         try {
-          await createCompletion(openRouterMessages, model, (chunk: string) => {
-            fullAssistantContent += chunk;
-            controller.enqueue(encoder.encode(`data: ${chunk}\n\n`));
-          });
-
-          console.log('[DEBUG] Full assistant response:', fullAssistantContent);
+          // Use structured output if intent detected
+          await createCompletion(
+            openRouterMessages, 
+            model, 
+            (chunk: string) => {
+              fullAssistantContent += chunk;
+              controller.enqueue(encoder.encode(`data: ${chunk}\n\n`));
+            },
+            intent.type || undefined
+          );
 
           await store.add(conversationId, {
             content: fullAssistantContent,

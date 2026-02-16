@@ -7,20 +7,19 @@ const globalForPrisma = globalThis as unknown as {
   pool: Pool | undefined;
 };
 
-// Create connection pool
+
 const pool =
   globalForPrisma.pool ??
   new Pool({
     connectionString: process.env.DATABASE_URL,
-    max: 10,
+    max: process.env.NODE_ENV === "production" ? 20 : 10,
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 2000,
+    ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : undefined,
   });
 
-// Create adapter
 const adapter = new PrismaPg(pool);
 
-// Create Prisma Client with adapter
 export const prisma =
   globalForPrisma.prisma ??
   new PrismaClient({
@@ -31,4 +30,12 @@ export const prisma =
 if (process.env.NODE_ENV !== 'production') {
   globalForPrisma.prisma = prisma;
   globalForPrisma.pool = pool;
+}
+
+// Graceful shutdown
+if (process.env.NODE_ENV === 'production') {
+  process.on('beforeExit', async () => {
+    await prisma.$disconnect();
+    await pool.end();
+  });
 }
