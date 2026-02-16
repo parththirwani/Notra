@@ -1,10 +1,9 @@
 import { Redis } from "@upstash/redis";
 import { Message } from "@/types/chat";
 
-// Use Upstash Redis for serverless-friendly caching
 const redis = Redis.fromEnv();
 
-const CACHE_TTL = 5 * 60; // 5 minutes in seconds
+const CACHE_TTL = 5 * 60; 
 
 export class RedisStore {
   private static instance: RedisStore;
@@ -36,7 +35,6 @@ export class RedisStore {
         console.log(`[RedisStore] Found ${messages.length} existing messages in cache`);
       }
     } else {
-      // If no cache, load from DB (handled by caller)
       if (process.env.NODE_ENV === 'development') {
         console.log(`[RedisStore] No cache found for ${conversationId}`);
       }

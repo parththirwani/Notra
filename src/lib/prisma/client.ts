@@ -7,15 +7,20 @@ const globalForPrisma = globalThis as unknown as {
   pool: Pool | undefined;
 };
 
-
+// Neon DB connection configuration optimized for serverless
 const pool =
   globalForPrisma.pool ??
   new Pool({
     connectionString: process.env.DATABASE_URL,
-    max: process.env.NODE_ENV === "production" ? 20 : 10,
+    // Neon serverless optimizations
+    max: process.env.NODE_ENV === "production" ? 10 : 5,
     idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 2000,
+    connectionTimeoutMillis: 5000,
+    // SSL is required for Neon in production
     ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : undefined,
+    // Optional: Enable keepalive for better connection stability
+    keepAlive: true,
+    keepAliveInitialDelayMillis: 10000,
   });
 
 const adapter = new PrismaPg(pool);
