@@ -1,11 +1,11 @@
 "use client";
 import { Message } from "./types";
 import { cn } from "@/lib/utils";
-import { MessageRole } from "@prisma/client";
 import MarkdownMessage from "./MarkdownMessage";
 import InteractiveMessage from "./InteractiveMessage";
 import { useEffect, useRef } from "react";
 import Image from "next/image";
+import { MessageRole } from "@/generated/enums";
 
 interface ChatAreaProps {
 	messages: Message[];

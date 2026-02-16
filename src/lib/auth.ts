@@ -1,7 +1,7 @@
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import GoogleProvider from "next-auth/providers/google";
 import type { NextAuthOptions } from "next-auth";
-import { prisma } from "./prisma";
+import { prisma } from "./prisma/client";
 
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma),
@@ -18,14 +18,14 @@ export const authOptions: NextAuthOptions = {
   callbacks: {
     async session({ session, token }) {
       if (session.user && token.sub) {
-        session.user.id = token.sub; // Assign user ID from token.sub
+        session.user.id = token.sub;
       }
       console.log("Session User ID:", session.user?.id);
       return session;
     },
     async jwt({ token, user }) {
       if (user) {
-        token.sub = user.id; // Store user ID in token.sub during sign-in
+        token.sub = user.id;
       }
       return token;
     },

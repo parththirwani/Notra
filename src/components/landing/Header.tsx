@@ -59,8 +59,6 @@ const Header = () => {
             </Button>
           )}
 
-          <Button className="bg-blue-500 hover:bg-blue-600 text-white">Upgrade</Button>
-
           <button className="md:hidden" aria-label="Open menu">
             <Menu className="h-5 w-5 text-blue-500" />
           </button>

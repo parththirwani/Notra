@@ -6,10 +6,10 @@ import ChatInput from "./ChatInput";
 import { Subject, Message } from "./types";
 import { ThemeProvider } from "next-themes"; 
 import { ThemeToggle } from "../ui/themeToggle";
-import { MessageRole } from "@prisma/client";
 import { Button } from "../ui/button";
 import Image from "next/image";
 import NotesModal from "./NotesModal";
+import { MessageRole } from "@/generated/enums";
 
 const API_BASE = "/api/chat";
 

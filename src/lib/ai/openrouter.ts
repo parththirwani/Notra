@@ -1,5 +1,5 @@
+import { MessageRole } from "@/generated/enums";
 import { MODEL } from "@/types/chat";
-import { MessageRole } from "@prisma/client";
 
 type OpenRouterRole = "system" | "user" | "assistant";
 
@@ -31,11 +31,11 @@ export async function createCompletion(
     throw new Error("OPENROUTER_API_KEY is not set");
   }
 
-  const openRouterMessages: OpenRouterMessage[] = messages.map(msg => {
+  const openRouterMessages: OpenRouterMessage[] = messages.map((msg) => {
     // If message has an image, use multimodal content format
     if (msg.image) {
       const content: (TextContent | ImageContent)[] = [];
-      
+
       // Add text if present
       if (msg.content) {
         content.push({
@@ -43,7 +43,7 @@ export async function createCompletion(
           text: msg.content,
         });
       }
-      
+
       // Add image
       content.push({
         type: "image_url",
@@ -51,13 +51,13 @@ export async function createCompletion(
           url: msg.image,
         },
       });
-      
+
       return {
         role: msg.role as OpenRouterRole,
         content,
       };
     }
-    
+
     // Standard text-only message
     return {
       role: msg.role as OpenRouterRole,
@@ -65,20 +65,23 @@ export async function createCompletion(
     };
   });
 
-  const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${process.env.OPENROUTER_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model,
-      messages: openRouterMessages,
-      stream: true,
-      temperature: 0.7,
-      max_tokens: 1000,
-    }),
-  });
+  const response = await fetch(
+    "https://openrouter.ai/api/v1/chat/completions",
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${process.env.OPENROUTER_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model,
+        messages: openRouterMessages,
+        stream: true,
+        temperature: 0.7,
+        max_tokens: 1000,
+      }),
+    }
+  );
 
   if (!response.ok) {
     const errorText = await response.text();
@@ -129,11 +132,11 @@ export async function createCompletionOnce(
     throw new Error("OPENROUTER_API_KEY is not set");
   }
 
-  const openRouterMessages: OpenRouterMessage[] = messages.map(msg => {
+  const openRouterMessages: OpenRouterMessage[] = messages.map((msg) => {
     // If message has an image, use multimodal content format
     if (msg.image) {
       const content: (TextContent | ImageContent)[] = [];
-      
+
       // Add text if present
       if (msg.content) {
         content.push({
@@ -141,7 +144,7 @@ export async function createCompletionOnce(
           text: msg.content,
         });
       }
-      
+
       // Add image
       content.push({
         type: "image_url",
@@ -149,13 +152,13 @@ export async function createCompletionOnce(
           url: msg.image,
         },
       });
-      
+
       return {
         role: msg.role as OpenRouterRole,
         content,
       };
     }
-    
+
     // Standard text-only message
     return {
       role: msg.role as OpenRouterRole,
@@ -163,20 +166,23 @@ export async function createCompletionOnce(
     };
   });
 
-  const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${process.env.OPENROUTER_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model,
-      messages: openRouterMessages,
-      stream: false,
-      temperature: 0.5,
-      max_tokens: 2000,
-    }),
-  });
+  const response = await fetch(
+    "https://openrouter.ai/api/v1/chat/completions",
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${process.env.OPENROUTER_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model,
+        messages: openRouterMessages,
+        stream: false,
+        temperature: 0.5,
+        max_tokens: 2000,
+      }),
+    }
+  );
 
   if (!response.ok) {
     const errorText = await response.text();

@@ -1,10 +1,12 @@
-import { PrismaClient, MessageRole } from '@prisma/client';
+
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createCompletion } from '@/lib/ai/openrouter';
 import { getAuthSession } from '@/lib/authSession';
 import { CreateChatSchema } from '@/types/chat';
 import { RedisStore } from '@/lib/ai/InMeomeryStore';
+import { MessageRole, PrismaClient } from '@prisma/client';
+
 
 const store = RedisStore.getInstance();
 
