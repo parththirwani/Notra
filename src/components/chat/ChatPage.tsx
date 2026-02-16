@@ -3,13 +3,20 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ChatSidebar from "./ChatSidebar";
 import ChatArea from "./ChatArea";
 import ChatInput from "./ChatInput";
-import { Subject, Message } from "./types";
+import { Message } from "./types";
 import { ThemeProvider } from "next-themes"; 
 import { ThemeToggle } from "../ui/themeToggle";
 import { Button } from "../ui/button";
 import Image from "next/image";
 import NotesModal from "./NotesModal";
-import { MessageRole } from "@/generated/enums";
+import { MessageRole } from "@prisma/client";
+
+type Subject = {
+	id: string;
+	title: string;
+	isActive: boolean;
+};
+
 
 const API_BASE = "/api/chat";
 

@@ -3,8 +3,8 @@ import { PrismaClient, MessageRole } from '@prisma/client';
 import { getAuthSession } from '@/lib/authSession';
 import { createCompletionOnce } from '@/lib/ai/openrouter';
 import { MODEL, SUPPORTED_MODELS } from '@/types/chat';
+import { prisma } from '@/lib/prisma/client';
 
-const prisma = new PrismaClient();
 
 export async function POST(req: Request, context: { params: { id: string } }) {
   try {

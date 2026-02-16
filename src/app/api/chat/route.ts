@@ -6,6 +6,7 @@ import { getAuthSession } from '@/lib/authSession';
 import { CreateChatSchema } from '@/types/chat';
 import { RedisStore } from '@/lib/ai/InMeomeryStore';
 import { MessageRole, PrismaClient } from '@prisma/client';
+import { prisma } from '@/lib/prisma/client';
 
 
 const store = RedisStore.getInstance();
@@ -59,7 +60,6 @@ const SYSTEM_IDENTITY = {
 };
 
 export async function POST(req: Request) {
-  const prisma = new PrismaClient();
   try {
     const session = await getAuthSession();
     const body = await req.json();

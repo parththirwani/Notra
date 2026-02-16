@@ -5,6 +5,7 @@ import { createCompletion } from '@/lib/ai/openrouter';
 import { getAuthSession } from '@/lib/authSession';
 import { CreateChatSchema } from '@/types/chat';
 import { RedisStore } from '@/lib/ai/InMeomeryStore';
+import { prisma } from '@/lib/prisma/client';
 
 const store = RedisStore.getInstance();
 
@@ -122,7 +123,6 @@ const SYSTEM_IDENTITY = {
 };
 
 export async function GET(req: Request, context: { params: { id: string } }) {
-  const prisma = new PrismaClient();
   try {
     const session = await getAuthSession();
     const { id: conversationId } = await context.params;
@@ -181,7 +181,6 @@ export async function GET(req: Request, context: { params: { id: string } }) {
 }
 
 export async function POST(req: Request, context: { params: { id: string } }) {
-  const prisma = new PrismaClient();
   try {
     const session = await getAuthSession();
     const { id: conversationId } = await context.params;
@@ -288,7 +287,6 @@ export async function POST(req: Request, context: { params: { id: string } }) {
 }
 
 export async function DELETE(req: Request, context: { params: { id: string } }) {
-  const prisma = new PrismaClient();
   try {
     const session = await getAuthSession();
     const { id: conversationId } = await context.params;

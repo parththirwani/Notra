@@ -2,6 +2,8 @@ import Redis from "ioredis";
 import { Message } from "@/types/chat";
 import { prisma } from "../prisma/client";
 
+
+
 const redis = new Redis(process.env.REDIS_URL || "redis://localhost:6380");
 const CACHE_TTL = 5 * 60; // 5 minutes in seconds
 

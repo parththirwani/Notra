@@ -5,7 +5,8 @@ import MarkdownMessage from "./MarkdownMessage";
 import InteractiveMessage from "./InteractiveMessage";
 import { useEffect, useRef } from "react";
 import Image from "next/image";
-import { MessageRole } from "@/generated/enums";
+import { MessageRole } from "@prisma/client";
+
 
 interface ChatAreaProps {
 	messages: Message[];
