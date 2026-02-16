@@ -1,7 +1,7 @@
-import { NextResponse } from 'next/server';
-import type { NextRequest } from 'next/server';
+import { NextResponse } from "next/server";
 
-export function middleware(_request: NextRequest) {
+// Recommended way in Next.js middleware
+export function middleware() {
   const response = NextResponse.next();
 
   // Security headers
