@@ -1,13 +1,14 @@
 import LandingPage from "../components/landing";
 import { redirect } from "next/navigation";
-import { getServerSession } from "next-auth";
+import { auth } from "@/lib/auth";
 
 export default async function Home() {
-  const session = await getServerSession();
-    if (session) {
+  let session = null;
+    session = await auth();
+  
+  if (session) {
     redirect("/chat");
   }
-  return (
-    <LandingPage></LandingPage>
-  );
+  
+  return <LandingPage />;
 }
