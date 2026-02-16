@@ -1,7 +1,7 @@
 import ChatPage from "@/components/chat/ChatPage";
 
-export default function Home() {
-  return (
-    <ChatPage/>
-  );
+export const dynamic = 'force-dynamic';
+
+export default function Chat() {
+  return <ChatPage />;
 }

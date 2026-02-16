@@ -1,4 +1,4 @@
-import { MessageRole } from "@/generated/enums";
+import { MessageRole } from "@prisma/client";
 import { z } from "zod";
 
 const MAX_INPUT_TOKENS = 1000;

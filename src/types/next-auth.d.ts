@@ -1,5 +1,5 @@
 import NextAuth from "next-auth";
-import type { DefaultSession } from "next-auth";
+import type { DefaultSession, User } from "next-auth";
 import type { JWT } from "next-auth/jwt";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import GoogleProvider from "next-auth/providers/google";
@@ -21,7 +21,14 @@ declare module "next-auth/jwt" {
 }
 
 export const authOptions = {
-  adapter: PrismaAdapter(prisma),
+  adapter: {
+    ...PrismaAdapter(prisma),
+    // Disable database sessions - use JWT only
+    createSession: undefined,
+    getSessionAndUser: undefined,
+    updateSession: undefined,
+    deleteSession: undefined,
+  },
   secret: process.env.NEXTAUTH_SECRET,
   providers: [
     GoogleProvider({
@@ -33,14 +40,13 @@ export const authOptions = {
     strategy: "jwt" as const,
   },
   callbacks: {
-    session({ session, token }: { session: any; token: JWT }) {
+    session({ session, token }: { session: DefaultSession; token: JWT }) {
       if (session.user && token.sub) {
         session.user.id = token.sub;
       }
-      console.log("Session User ID:", session.user?.id);
       return session;
     },
-    jwt({ token, user }: { token: JWT; user: any }) {
+    jwt({ token, user }: { token: JWT; user?: User }) {
       if (user?.id) {
         token.sub = user.id;
       }

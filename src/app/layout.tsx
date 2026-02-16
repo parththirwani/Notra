@@ -19,6 +19,8 @@ export const metadata: Metadata = {
   description: "Notra: AI STEM Learning Platform",
 };
 
+export const dynamic = 'force-dynamic';
+
 export default async function RootLayout({
   children,
 }: {
@@ -28,9 +30,9 @@ export default async function RootLayout({
   
   try {
     session = await auth();
-  } catch (error: any) {
-    // Silently ignore old cookie errors - they're harmless
-    if (!error.message?.includes('Invalid Compact JWE')) {
+  } catch (error) {
+    // Silently ignore old cookie errors during static generation
+    if (error instanceof Error && !error.message.includes('Invalid Compact JWE') && !error.message.includes('Dynamic server usage')) {
       console.error("Auth error:", error);
     }
   }

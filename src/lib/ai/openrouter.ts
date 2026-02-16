@@ -1,5 +1,5 @@
-import { MessageRole } from "@/generated/enums";
 import { MODEL } from "@/types/chat";
+import { MessageRole } from "@prisma/client";
 
 type OpenRouterRole = "system" | "user" | "assistant";
 
