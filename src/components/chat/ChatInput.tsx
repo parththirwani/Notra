@@ -5,35 +5,41 @@ import { Send, X, Image as ImageIcon } from "lucide-react";
 import { Textarea } from "../ui/textarea";
 import { Button } from "../ui/button";
 import Image from "next/image";
+import ModelSelector from "./ModelSelector";
+import { MODEL } from "@/types/chat";
 
 interface ChatInputProps {
   onSendMessage: (message: string, image?: string) => void;
   disabled?: boolean;
+  model: MODEL;
+  onModelChange: (model: MODEL) => void;
 }
 
-const ChatInput = ({ onSendMessage, disabled }: ChatInputProps) => {
+const MAX_IMAGE_SIZE_MB = 10;
+
+const ChatInput = ({ onSendMessage, disabled, model, onModelChange }: ChatInputProps) => {
   const [message, setMessage] = useState("");
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [imageError, setImageError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Validate file type
-    if (!file.type.startsWith('image/')) {
-      alert('Please select an image file');
+    setImageError(null);
+
+    if (!file.type.startsWith("image/")) {
+      setImageError("Please select an image file");
       return;
     }
 
-    // Validate file size (max 10MB)
-    if (file.size > 10 * 1024 * 1024) {
-      alert('Image size must be less than 10MB');
+    if (file.size > MAX_IMAGE_SIZE_MB * 1024 * 1024) {
+      setImageError(`Image size must be less than ${MAX_IMAGE_SIZE_MB}MB`);
       return;
     }
 
-    // Create preview
     const reader = new FileReader();
     reader.onload = (e) => {
       const result = e.target?.result as string;
@@ -46,8 +52,9 @@ const ChatInput = ({ onSendMessage, disabled }: ChatInputProps) => {
   const removeImage = () => {
     setSelectedImage(null);
     setImagePreview(null);
+    setImageError(null);
     if (fileInputRef.current) {
-      fileInputRef.current.value = '';
+      fileInputRef.current.value = "";
     }
   };
 
@@ -91,6 +98,18 @@ const ChatInput = ({ onSendMessage, disabled }: ChatInputProps) => {
         </div>
       )}
 
+      {/* Image error */}
+      {imageError && (
+        <div className="max-w-2xl mx-auto mb-2 px-4">
+          <p className="text-xs text-red-500">{imageError}</p>
+        </div>
+      )}
+
+      {/* Model selector row */}
+      <div className="max-w-2xl mx-auto mb-2 px-1">
+        <ModelSelector value={model} onChange={onModelChange} disabled={disabled} />
+      </div>
+
       <div
         className="flex items-center gap-2 rounded-full 
         bg-gray-100 dark:bg-[#1f1f1f] 
@@ -123,10 +142,13 @@ const ChatInput = ({ onSendMessage, disabled }: ChatInputProps) => {
           value={message}
           onChange={(e) => setMessage(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder={selectedImage ? "Describe what you want to know about the image..." : "Ask anything"}
+          placeholder={
+            selectedImage
+              ? "Describe what you want to know about the image..."
+              : "Ask anything"
+          }
           disabled={disabled}
-          className="flex-1 
-          resize-none text-sm placeholder-gray-500 dark:placeholder-gray-400 
+          className="flex-1 resize-none text-sm placeholder-gray-500 dark:placeholder-gray-400 
           text-gray-900 dark:text-gray-100 leading-tight py-2"
           rows={1}
         />
