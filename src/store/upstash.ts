@@ -1,9 +1,25 @@
-import { Redis } from "@upstash/redis";
+import Redis from "ioredis";
 import { Message } from "@/types/chat";
 
-const redis = Redis.fromEnv();
+const CACHE_TTL = 5 * 60; // 5 minutes
 
-const CACHE_TTL = 5 * 60; 
+// Singleton Redis client
+const globalForRedis = globalThis as unknown as { redis: Redis | undefined };
+
+const redis =
+  globalForRedis.redis ??
+  new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", {
+    maxRetriesPerRequest: 3,
+    enableReadyCheck: true,
+  });
+
+if (process.env.NODE_ENV !== "production") {
+  globalForRedis.redis = redis;
+}
+
+redis.on("error", (err) => {
+  console.error("[RedisStore] Connection error:", err.message);
+});
 
 export class RedisStore {
   private static instance: RedisStore;
@@ -11,8 +27,8 @@ export class RedisStore {
   static getInstance() {
     if (!RedisStore.instance) {
       RedisStore.instance = new RedisStore();
-      if (process.env.NODE_ENV === 'development') {
-        console.log("[RedisStore] Instance created with Upstash");
+      if (process.env.NODE_ENV === "development") {
+        console.log("[RedisStore] Instance created with ioredis");
       }
     }
     return RedisStore.instance;
@@ -20,38 +36,45 @@ export class RedisStore {
 
   async add(conversationId: string, message: Message): Promise<Message[]> {
     const key = `chat:${conversationId}`;
-    
-    if (process.env.NODE_ENV === 'development') {
-      console.log(`[RedisStore] Adding message to conversation: ${conversationId}, role: ${message.role}, hasImage: ${!!message.image}`);
+
+    if (process.env.NODE_ENV === "development") {
+      console.log(
+        `[RedisStore] Adding message to conversation: ${conversationId}, role: ${message.role}, hasImage: ${!!message.image}`
+      );
     }
 
-    // Get existing messages from cache
-    const cached = await redis.get<Message[]>(key);
+    const raw = await redis.get(key);
     let messages: Message[] = [];
 
-    if (cached) {
-      messages = cached;
-      if (process.env.NODE_ENV === 'development') {
-        console.log(`[RedisStore] Found ${messages.length} existing messages in cache`);
+    if (raw) {
+      try {
+        messages = JSON.parse(raw) as Message[];
+      } catch {
+        messages = [];
+      }
+      if (process.env.NODE_ENV === "development") {
+        console.log(
+          `[RedisStore] Found ${messages.length} existing messages in cache`
+        );
       }
     } else {
-      if (process.env.NODE_ENV === 'development') {
+      if (process.env.NODE_ENV === "development") {
         console.log(`[RedisStore] No cache found for ${conversationId}`);
       }
     }
 
-    // Add new message
     messages.push(message);
-    
-    if (process.env.NODE_ENV === 'development') {
+
+    if (process.env.NODE_ENV === "development") {
       console.log(`[RedisStore] Message added. New count: ${messages.length}`);
     }
 
-    // Store back in Redis with TTL
-    await redis.setex(key, CACHE_TTL, messages);
-    
-    if (process.env.NODE_ENV === 'development') {
-      console.log(`[RedisStore] Messages cached for ${conversationId} with TTL: ${CACHE_TTL}s`);
+    await redis.setex(key, CACHE_TTL, JSON.stringify(messages));
+
+    if (process.env.NODE_ENV === "development") {
+      console.log(
+        `[RedisStore] Messages cached for ${conversationId} with TTL: ${CACHE_TTL}s`
+      );
     }
 
     return messages;
@@ -59,23 +82,32 @@ export class RedisStore {
 
   async get(conversationId: string): Promise<Message[]> {
     const key = `chat:${conversationId}`;
-    
-    if (process.env.NODE_ENV === 'development') {
-      console.log(`[RedisStore] Retrieving messages for conversation: ${conversationId}`);
+
+    if (process.env.NODE_ENV === "development") {
+      console.log(
+        `[RedisStore] Retrieving messages for conversation: ${conversationId}`
+      );
     }
 
-    const cached = await redis.get<Message[]>(key);
+    const raw = await redis.get(key);
 
-    if (cached) {
-      if (process.env.NODE_ENV === 'development') {
-        console.log(`[RedisStore] Found ${cached.length} cached messages`);
+    if (raw) {
+      try {
+        const messages = JSON.parse(raw) as Message[];
+        if (process.env.NODE_ENV === "development") {
+          console.log(
+            `[RedisStore] Found ${messages.length} cached messages`
+          );
+        }
+        // Extend TTL on access
+        await redis.expire(key, CACHE_TTL);
+        return messages;
+      } catch {
+        return [];
       }
-      // Extend TTL on access
-      await redis.expire(key, CACHE_TTL);
-      return cached;
     }
 
-    if (process.env.NODE_ENV === 'development') {
+    if (process.env.NODE_ENV === "development") {
       console.log(`[RedisStore] No cache found for ${conversationId}`);
     }
     return [];
@@ -83,18 +115,24 @@ export class RedisStore {
 
   async delete(conversationId: string): Promise<void> {
     const key = `chat:${conversationId}`;
-    
-    if (process.env.NODE_ENV === 'development') {
-      console.log(`[RedisStore] Deleting messages for conversation: ${conversationId}`);
+
+    if (process.env.NODE_ENV === "development") {
+      console.log(
+        `[RedisStore] Deleting messages for conversation: ${conversationId}`
+      );
     }
 
     const result = await redis.del(key);
 
-    if (process.env.NODE_ENV === 'development') {
+    if (process.env.NODE_ENV === "development") {
       if (result === 1) {
-        console.log(`[RedisStore] Successfully deleted cache for ${conversationId}`);
+        console.log(
+          `[RedisStore] Successfully deleted cache for ${conversationId}`
+        );
       } else {
-        console.log(`[RedisStore] No cache found to delete for ${conversationId}`);
+        console.log(
+          `[RedisStore] No cache found to delete for ${conversationId}`
+        );
       }
     }
   }
@@ -102,8 +140,8 @@ export class RedisStore {
   async clearCache(conversationId: string): Promise<void> {
     const key = `chat:${conversationId}`;
     await redis.del(key);
-    
-    if (process.env.NODE_ENV === 'development') {
+
+    if (process.env.NODE_ENV === "development") {
       console.log(`[RedisStore] Cache cleared for ${conversationId}`);
     }
   }
