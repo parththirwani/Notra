@@ -19,7 +19,7 @@ export const metadata: Metadata = {
   description: "Notra: AI STEM Learning Platform",
 };
 
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
 
 export default async function RootLayout({
   children,
@@ -27,18 +27,21 @@ export default async function RootLayout({
   children: React.ReactNode;
 }) {
   let session = null;
-  
+
   try {
     session = await auth();
   } catch (error) {
-    // Silently ignore old cookie errors during static generation
-    if (error instanceof Error && !error.message.includes('Invalid Compact JWE') && !error.message.includes('Dynamic server usage')) {
+    if (
+      error instanceof Error &&
+      !error.message.includes("Invalid Compact JWE") &&
+      !error.message.includes("Dynamic server usage")
+    ) {
       console.error("Auth error:", error);
     }
   }
 
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >

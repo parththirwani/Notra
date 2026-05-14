@@ -1,4 +1,4 @@
-"use client"
+"use client";
 import { useEffect } from "react";
 import Header from "@/components/landing/Header";
 import Hero from "@/components/landing/Hero";
@@ -11,11 +11,11 @@ import Footer from "@/components/landing/Footer";
 const LandingPage = () => {
   useEffect(() => {
     document.title = "Notra — AI Study Rooms for STEM";
-    const desc = "Create subject rooms, chat with your notes, and auto‑generate flashcards, MCQs, and 3‑hour exams for STEM.";
+    const desc =
+      "Create subject rooms, chat with your notes, and auto‑generate flashcards, MCQs, and 3‑hour exams for STEM.";
     const meta = document.querySelector('meta[name="description"]');
     if (meta) meta.setAttribute("content", desc);
 
-    // Dynamic canonical tag
     const existing = document.querySelector('link[rel="canonical"]');
     const link = existing || document.createElement("link");
     link.setAttribute("rel", "canonical");
@@ -35,9 +35,12 @@ const LandingPage = () => {
   };
 
   return (
-    <>
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
-
+    // Force light mode for the entire landing page regardless of system/user theme
+    <div className="light [color-scheme:light] bg-white text-gray-900 min-h-screen">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
       <Header />
       <main>
         <Hero />
@@ -46,9 +49,8 @@ const LandingPage = () => {
         <Subjects />
         <CTA />
       </main>
-
       <Footer />
-    </>
+    </div>
   );
 };
 

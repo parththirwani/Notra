@@ -4,9 +4,11 @@ import { PrismaAdapter } from "@auth/prisma-adapter";
 import { prisma } from "./prisma/client";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
+  trustHost: true,
   adapter: {
-    ...PrismaAdapter(prisma),
-    createSession: undefined, 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ...PrismaAdapter(prisma as any),
+    createSession: undefined,
     getSessionAndUser: undefined,
     updateSession: undefined,
     deleteSession: undefined,
@@ -18,7 +20,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     }),
   ],
   session: {
-    strategy: "jwt", 
+    strategy: "jwt",
   },
   callbacks: {
     session({ session, token }) {

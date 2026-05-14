@@ -19,7 +19,14 @@ interface SignInModalProps {
 export function SignInModal({ open, onOpenChange }: SignInModalProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md rounded-2xl shadow-lg">
+      <DialogContent
+        className="sm:max-w-md rounded-2xl shadow-lg border border-gray-200"
+        style={{
+          backgroundColor: "#ffffff",
+          color: "#111827",
+          colorScheme: "light",
+        }}
+      >
         <DialogHeader className="flex flex-col items-center gap-2">
           <div className="relative h-36 w-28">
             <Image
@@ -29,10 +36,10 @@ export function SignInModal({ open, onOpenChange }: SignInModalProps) {
               className="object-contain"
             />
           </div>
-          <DialogTitle className="text-center text-xl font-semibold">
+          <DialogTitle className="text-center text-xl font-semibold" style={{ color: "#111827" }}>
             Welcome back
           </DialogTitle>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-sm" style={{ color: "#6b7280" }}>
             Sign in to continue with Notra
           </p>
         </DialogHeader>
@@ -40,7 +47,12 @@ export function SignInModal({ open, onOpenChange }: SignInModalProps) {
         <div className="flex flex-col items-center gap-4 py-4">
           <Button
             variant="outline"
-            className="w-full flex items-center justify-center gap-2 border-gray-300 hover:border-blue-500 hover:text-blue-500"
+            className="w-full flex items-center justify-center gap-2"
+            style={{
+              backgroundColor: "#ffffff",
+              color: "#111827",
+              borderColor: "#d1d5db",
+            }}
             onClick={() => signIn("google", { callbackUrl: "/chat" })}
           >
             <FcGoogle size={20} />
