@@ -7,6 +7,7 @@ import { prisma } from '@/lib/prisma/client';
 import { SYSTEM_PROMPT, SECURITY_POLICY, MODEL_IDENTITY_PROMPT } from '@/lib/prompts/systemPrompts';
 import { RedisStore } from '@/store/upstash';
 import { createCompletion } from '@/lib/ai/openrouter';
+import { saveWorkspaceItem } from '@/lib/workspace/workspaceService';
 
 const store = RedisStore.getInstance();
 
@@ -240,6 +241,18 @@ export async function POST(
               role: MessageRole.assistant,
             },
           });
+
+          // ── Save to workspace if this is an interactive item ──────────────
+          try {
+            await saveWorkspaceItem({
+              userId: session.user.id,
+              conversationId,
+              conversationTitle: conversation.title ?? 'Untitled',
+              rawContent: fullAssistantContent,
+            });
+          } catch (err) {
+            console.error('[workspace] Failed to save item:', err);
+          }
 
           await store.delete(conversationId);
 

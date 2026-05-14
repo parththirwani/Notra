@@ -8,6 +8,7 @@ import { SYSTEM_PROMPT, SECURITY_POLICY, MODEL_IDENTITY_PROMPT } from '@/lib/pro
 import { RedisStore } from '@/store/upstash';
 import { createCompletion } from '@/lib/ai/openrouter';
 import { generateChatTitle } from '@/lib/titleService';
+import { saveWorkspaceItem } from '@/lib/workspace/workspaceService';
 
 const store = RedisStore.getInstance();
 
@@ -162,6 +163,18 @@ export async function POST(req: Request) {
               role: MessageRole.assistant,
             },
           });
+
+          // ── Save to workspace if this is an interactive item ──────────────
+          try {
+            await saveWorkspaceItem({
+              userId: session.user.id,
+              conversationId,
+              conversationTitle: title,
+              rawContent: fullAssistantContent,
+            });
+          } catch (err) {
+            console.error('[workspace] Failed to save item:', err);
+          }
 
           await store.delete(conversationId);
 

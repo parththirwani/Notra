@@ -16,96 +16,86 @@ interface MarkdownMessageProps {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // NORMALIZER
+// Handles every known LLM markdown output pathology in a deterministic order.
 // ─────────────────────────────────────────────────────────────────────────────
 
 function normalize(raw: string): string {
   let t = raw;
 
-  // 0. Line endings
+  // ── 0. Normalise line endings ─────────────────────────────────────────────
   t = t.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
 
-  // 1. Bullet-dot → dash
+  // ── 1. Bullet-dot → dash ──────────────────────────────────────────────────
   t = t.replace(/^\s*[•·]\s+/gm, "- ");
 
-  // 2. Fix stray space inside bold: "** Label**" → "**Label**"
-  //    Must run BEFORE the inline-splitter so bold tokens are clean.
-  t = t.replace(/\*\* ([^*\n]+)\*\*/g, "**$1**");
+  // ── 2. CORE FIX: inline sub-items after a numbered item ───────────────────
+  // Pattern the LLM produces:
+  //   "1. Foo: bar baz. ** Edges:** stuff. ** Degree:** stuff"
+  //   "1. Foo: bar. . ** Next:** stuff"
+  //
+  // Strategy: split each line that contains `. **` or `. ** ` sequences
+  // into multiple lines, giving each sub-item its own bullet.
 
-  // ── 3. CORE FIX ─────────────────────────────────────────────────────────
-  // LLMs collapse sub-items onto a single line in two patterns:
-  //
-  // Pattern A – dash delimiter (most common):
-  //   "1. Nodes and Edges: - **Nodes**: desc - **Edges**: desc"
-  //   "Some text - **Label**: desc - **Label2**: desc"
-  //
-  // Pattern B – period delimiter:
-  //   "1. Vertices: intro. **Edges:** desc. **Degree:** desc"
-  //
-  // We explode each into one parent line + indented bullet sub-items.
   t = t
     .split("\n")
-    .flatMap((line): string[] => {
-      const indent = (line.match(/^(\s*)/) ?? ["", ""])[1];
-      const isNumbered = /^\s*\d+\.\s/.test(line);
+    .flatMap((line) => {
+      // Only touch numbered-list lines that have inline bold sub-items
+      // Pattern: number. Content. ** Label:** more content
+      if (!/^\s*\d+\.\s/.test(line)) return [line];
+      if (!/ \*\*/.test(line) && !/\. \*\*/.test(line)) return [line];
 
-      // ── Pattern A: " - **" ───────────────────────────────────────────────
-      if (/ - \*\*/.test(line)) {
-        const segments = line.split(/ - (?=\*\*)/);
-        if (segments.length > 1) {
-          const result: string[] = [];
-          const parent = segments[0].replace(/:\s*$/, "").trim();
-          if (parent) result.push(parent);
-          for (let i = 1; i < segments.length; i++) {
-            const sub = segments[i].trim();
-            if (sub) result.push(`${indent}   - ${sub}`);
-          }
-          if (result.length > 1) return result;
+      // Split on ". **" or ". . **" (the period-space-bold pattern)
+      // to extract the first item and sub-items
+      const parts = line.split(/(?:\.\s*)+(?=\s*\*\*[^*])/);
+      if (parts.length <= 1) return [line];
+
+      const result: string[] = [];
+      const numMatch = parts[0].match(/^(\s*)(\d+)\.\s+(.*)/);
+      if (!numMatch) return [line];
+
+      const [, indent, , firstContent] = numMatch;
+      // First part becomes the numbered item
+      result.push(`${indent}${numMatch[2]}. ${firstContent.trim()}`);
+
+      // Remaining parts become sub-bullets under it
+      for (let i = 1; i < parts.length; i++) {
+        const sub = parts[i].trim();
+        if (sub.length > 0) {
+          result.push(`${indent}   - ${sub}`);
         }
       }
-
-      // ── Pattern B: ". **" on a numbered line ─────────────────────────────
-      if (isNumbered && /\. \*\*/.test(line)) {
-        const segments = line.split(/\. (?=\*\*)/);
-        if (segments.length > 1) {
-          const result: string[] = [];
-          const first = segments[0].trim();
-          result.push(first.endsWith(".") ? first : first + ".");
-          for (let i = 1; i < segments.length; i++) {
-            const sub = segments[i].trim();
-            if (sub) result.push(`${indent}   - ${sub}`);
-          }
-          if (result.length > 1) return result;
-        }
-      }
-
-      return [line];
+      return result;
     })
     .join("\n");
 
-  // 4. Fix bold immediately followed by non-space: "**Word:**text" → "**Word:** text"
-  t = t.replace(/(\*\*[^*\n]+\*\*)([^\s*\n,.])/g, "$1 $2");
+  // ── 3. Fix "** Label:** text" → "**Label:** text" (stray space after **) ──
+  t = t.replace(/\*\* ([^*]+)\*\*/g, "**$1**");
 
-  // 5. Code fence isolation
+  // ── 4. Fix bold immediately followed by a letter (broken bold close) ───────
+  //   "**Purpose:**ijkstra" → "**Purpose:** ijkstra"
+  t = t.replace(/\*\*([^*\n]+)\*\*([A-Za-z])/g, "**$1** $2");
+
+  // ── 5. Code fence isolation ───────────────────────────────────────────────
   t = t.replace(/([^\n])```/g, "$1\n```");
   t = t.replace(/```([^\n`])/g, "```\n$1");
 
-  // 6. Blank line before headings
+  // ── 6. Ensure blank line before headings ──────────────────────────────────
   t = t.replace(/([^\n])\n(#{1,6} )/g, "$1\n\n$2");
 
-  // 7. Blank line before numbered lists
+  // ── 7. Ensure blank line before numbered lists ────────────────────────────
   t = t.replace(/([^\n])\n(\d+\. )/g, "$1\n\n$2");
 
-  // 8. Blank line before bullet lists
+  // ── 8. Ensure blank line before bullet lists ──────────────────────────────
   t = t.replace(/([^\n])\n([ \t]*- )/g, "$1\n\n$2");
 
-  // 9. Strip orphaned --- adjacent to headings
+  // ── 9. Strip orphaned horizontal rules adjacent to headings ──────────────
   t = t.replace(/\n---+\n(#{1,6} )/g, "\n\n$1");
   t = t.replace(/(#{1,6} [^\n]+)\n---+\n/g, "$1\n\n");
 
-  // 10. Collapse 3+ blank lines → 2
+  // ── 10. Collapse 3+ blank lines → 2 ──────────────────────────────────────
   t = t.replace(/\n{3,}/g, "\n\n");
 
-  // 11. Math: ( expr ) → $expr$ when it looks mathematical
+  // ── 11. Math notation: ( expr ) → $expr$ when it looks like math ─────────
   t = t.replace(/\(\s*([A-Za-z0-9][^()]{0,30})\s*\)/g, (match, inner) => {
     const trimmed = inner.trim();
     if (/[+\-*/\\^_=<>]/.test(trimmed) || /^\d/.test(trimmed)) {
@@ -114,11 +104,15 @@ function normalize(raw: string): string {
     return match;
   });
 
+  // ── 12. Fix ( X ) single letter → bold ───────────────────────────────────
+  t = t.replace(/\(\s*([A-Za-z])\s*\)/g, "**$1**");
+
   return t.trim();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TABLE GUARD — drop last incomplete row during streaming
+// TABLE GUARD
+// Drop the last incomplete table row during streaming.
 // ─────────────────────────────────────────────────────────────────────────────
 
 function guardIncompleteTable(content: string): string {
@@ -139,10 +133,14 @@ function guardIncompleteTable(content: string): string {
   if (inTable && sepSeen) {
     const last = lines[lines.length - 1].trim();
     if (last.includes("|")) {
-      const pipes = (last.match(/\|/g) ?? []).length;
+      const pipes = (last.match(/\|/g) || []).length;
       if (!last.endsWith("|") || pipes < 2) {
+        // Drop the incomplete row
         for (let i = lines.length - 1; i >= 0; i--) {
-          if (lines[i].trim().includes("|")) { lines.splice(i, 1); break; }
+          if (lines[i].trim().includes("|")) {
+            lines.splice(i, 1);
+            break;
+          }
         }
       }
     }
@@ -204,7 +202,10 @@ const MarkdownMessage = ({ content, isDark }: MarkdownMessageProps) => {
         components={{
           // eslint-disable-next-line @typescript-eslint/no-unused-vars
           h1: ({ node, ...props }) => (
-            <h1 className="text-[1.15rem] font-semibold mt-3 mb-2 first:mt-0 border-b border-gray-600/20 pb-1" {...props} />
+            <h1
+              className="text-[1.15rem] font-semibold mt-3 mb-2 first:mt-0 border-b border-gray-600/20 pb-1"
+              {...props}
+            />
           ),
           // eslint-disable-next-line @typescript-eslint/no-unused-vars
           h2: ({ node, ...props }) => (
@@ -271,7 +272,10 @@ const MarkdownMessage = ({ content, isDark }: MarkdownMessageProps) => {
           ),
           // eslint-disable-next-line @typescript-eslint/no-unused-vars
           blockquote: ({ node, ...props }) => (
-            <blockquote className="border-l-4 border-gray-400/40 pl-3 italic opacity-90 my-2" {...props} />
+            <blockquote
+              className="border-l-4 border-gray-400/40 pl-3 italic opacity-90 my-2"
+              {...props}
+            />
           ),
           // eslint-disable-next-line @typescript-eslint/no-unused-vars
           hr: ({ node, ...props }) => (
@@ -279,7 +283,12 @@ const MarkdownMessage = ({ content, isDark }: MarkdownMessageProps) => {
           ),
           // eslint-disable-next-line @typescript-eslint/no-unused-vars
           a: ({ node, ...props }) => (
-            <a className="underline underline-offset-2 opacity-90 hover:opacity-100" target="_blank" rel="noopener noreferrer" {...props} />
+            <a
+              className="underline underline-offset-2 opacity-90 hover:opacity-100"
+              target="_blank"
+              rel="noopener noreferrer"
+              {...props}
+            />
           ),
         }}
       >
