@@ -7,23 +7,13 @@ import { prisma } from '@/lib/prisma/client';
 import { SYSTEM_PROMPT, SECURITY_POLICY, MODEL_IDENTITY_PROMPT } from '@/lib/prompts/systemPrompts';
 import { RedisStore } from '@/store/upstash';
 import { createCompletion } from '@/lib/ai/openrouter';
+import { generateChatTitle } from '@/lib/titleService';
 
 const store = RedisStore.getInstance();
 
 const CreateChatWithImageSchema = CreateChatSchema.extend({
   image: z.string().optional(),
 });
-
-const generateChatTitle = (message: string, hasImage: boolean) => {
-  const maxLength = 50;
-  if (hasImage && !message.trim()) return "Image analysis";
-  if (hasImage && message.trim()) {
-    return `Image: ${message.length > maxLength ? message.substring(0, maxLength - 3) + '...' : message}`;
-  }
-  return message.length > maxLength
-    ? `${message.substring(0, maxLength - 3)}...`
-    : message;
-};
 
 function detectInteractiveIntent(input: string): { type: 'quiz' | 'mcq' | 'flashcard' | null } {
   if (/(quiz|practice\s*(quiz|questions?)|5\s*questions?|multiple\s*questions?)/i.test(input)) {
@@ -94,10 +84,13 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { message, model, image } = CreateChatWithImageSchema.parse(body);
 
+    // Generate a semantic title via the LLM title service
+    const title = await generateChatTitle(message, !!image);
+
     const conversation = await prisma.conversation.create({
       data: {
         userId: session.user.id,
-        title: generateChatTitle(message, !!image),
+        title,
       },
     });
 
