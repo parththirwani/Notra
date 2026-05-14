@@ -16,59 +16,69 @@ const CreateChatWithImageSchema = CreateChatSchema.extend({
 
 function detectInteractiveIntent(input: string): { type: 'quiz' | 'mcq' | 'flashcard' | null } {
   const text = input.toLowerCase();
-  
   if (/(quiz|practice\s*(quiz|questions?)|5\s*questions?|multiple\s*questions?)/i.test(text)) {
     return { type: 'quiz' };
   }
-  
   if (/(mcq|mcw|multiple\s*choice|single\s*question)/i.test(text)) {
     return { type: 'mcq' };
   }
-  
   if (/(flash\s*card|flashcard)/i.test(text)) {
     return { type: 'flashcard' };
   }
-  
   return { type: null };
 }
 
-function getFormattingInstruction(intentType: 'quiz' | 'mcq' | 'flashcard'): string {
+/**
+ * Extract topic from the persisted DB history (not Redis, which is cleared after each turn).
+ * Grabs the last substantive assistant message to ground MCQ/quiz/flashcard generation.
+ */
+function extractTopicFromHistory(
+  dbMessages: { role: MessageRole; content: string }[]
+): string {
+  // Walk backwards — find the most recent assistant message with real content
+  for (let i = dbMessages.length - 1; i >= 0; i--) {
+    const msg = dbMessages[i];
+    if (msg.role === MessageRole.assistant && msg.content.trim().length > 80) {
+      return msg.content.trim().slice(0, 600);
+    }
+  }
+  // Fallback: last user message that isn't an intent trigger
+  for (let i = dbMessages.length - 1; i >= 0; i--) {
+    const msg = dbMessages[i];
+    if (
+      msg.role === MessageRole.user &&
+      msg.content.trim().length > 10 &&
+      !detectInteractiveIntent(msg.content).type
+    ) {
+      return msg.content.trim().slice(0, 600);
+    }
+  }
+  return '';
+}
+
+function getFormattingInstruction(
+  intentType: 'quiz' | 'mcq' | 'flashcard',
+  topic: string
+): string {
+  const topicBlock = topic
+    ? `You MUST base all questions STRICTLY on the following content from the conversation. Do NOT reference anything outside of it — not the platform name, not the model name, nothing else.\n\nConversation content:\n"""\n${topic}\n"""`
+    : 'Use only the topic discussed in the conversation above.';
+
   if (intentType === 'quiz') {
-    return `Generate a quiz with exactly 5 multiple choice questions about the requested topic.
-
-Each question must have exactly 4 options, with one marked as correct.
-
-The response will be automatically formatted as a structured JSON object.`;
+    return `Generate a quiz with exactly 5 multiple choice questions.\n\n${topicBlock}\n\nEach question must have exactly 4 options with one marked as correct. The response will be formatted as a structured JSON object.`;
   }
-  
   if (intentType === 'mcq') {
-    return `Generate a single multiple choice question about the requested topic.
-
-The question must have exactly 4 options, with one marked as correct.
-
-The response will be automatically formatted as a structured JSON object.`;
+    return `Generate a single multiple choice question.\n\n${topicBlock}\n\nThe question must have exactly 4 options with one marked as correct. The response will be formatted as a structured JSON object.`;
   }
-  
   if (intentType === 'flashcard') {
-    return `Generate a flashcard about the requested topic.
-
-Create clear front and back content that is educational and concise.
-
-The response will be automatically formatted as a structured JSON object.`;
+    return `Generate a flashcard.\n\n${topicBlock}\n\nCreate clear front and back content that is educational and concise. The response will be formatted as a structured JSON object.`;
   }
-  
   return '';
 }
 
 const COMBINED_SYSTEM_MESSAGE = {
   role: MessageRole.system,
-  content: [
-    SECURITY_POLICY,
-    '',
-    SYSTEM_PROMPT,
-    '',
-    MODEL_IDENTITY_PROMPT,
-  ].join('\n')
+  content: [SECURITY_POLICY, '', SYSTEM_PROMPT, '', MODEL_IDENTITY_PROMPT].join('\n'),
 };
 
 export async function GET(
@@ -84,18 +94,21 @@ export async function GET(
     });
 
     if (!conversation || conversation.userId !== session.user.id) {
-      return NextResponse.json({ error: 'Conversation not found or unauthorized' }, { status: 404 });
+      return NextResponse.json(
+        { error: 'Conversation not found or unauthorized' },
+        { status: 404 }
+      );
     }
 
     let messages = await store.get(conversationId);
-    
+
     if (messages.length === 0) {
       const dbMessages = await prisma.message.findMany({
         where: { conversationId },
         orderBy: { createdAt: 'asc' },
       });
-      
-      messages = dbMessages.map(msg => ({
+
+      messages = dbMessages.map((msg) => ({
         id: msg.id,
         content: msg.content,
         role: msg.role,
@@ -105,19 +118,19 @@ export async function GET(
     }
 
     return NextResponse.json(
-      { 
+      {
         conversation: {
           id: conversation.id,
           title: conversation.title,
           createdAt: conversation.createdAt,
         },
-        messages: messages.map(msg => ({
+        messages: messages.map((msg) => ({
           id: msg.id || null,
           content: msg.content,
           role: msg.role,
           image: msg.image,
           createdAt: new Date(msg.timestamp || new Date()),
-        }))
+        })),
       },
       { status: 200 }
     );
@@ -147,7 +160,24 @@ export async function POST(
     });
 
     if (!conversation || conversation.userId !== session.user.id) {
-      return NextResponse.json({ error: 'Conversation not found or unauthorized' }, { status: 404 });
+      return NextResponse.json(
+        { error: 'Conversation not found or unauthorized' },
+        { status: 404 }
+      );
+    }
+
+    const intent = detectInteractiveIntent(message);
+
+    // Fetch persisted DB history BEFORE adding the new message.
+    // Redis cache is deleted after each turn so cannot be used for topic extraction.
+    let conversationTopic = '';
+    if (intent.type) {
+      const dbHistory = await prisma.message.findMany({
+        where: { conversationId },
+        orderBy: { createdAt: 'asc' },
+        select: { role: true, content: true },
+      });
+      conversationTopic = extractTopicFromHistory(dbHistory);
     }
 
     const messages = await store.add(conversationId, {
@@ -157,11 +187,16 @@ export async function POST(
       image,
     });
 
-    const intent = detectInteractiveIntent(message);
-    
     const openRouterMessages = [
       COMBINED_SYSTEM_MESSAGE,
-      ...(intent.type ? [{ role: MessageRole.system, content: getFormattingInstruction(intent.type) }] : []),
+      ...(intent.type
+        ? [
+            {
+              role: MessageRole.system,
+              content: getFormattingInstruction(intent.type, conversationTopic),
+            },
+          ]
+        : []),
       ...messages.map((msg) => ({
         role: msg.role,
         content: msg.content,
@@ -174,10 +209,9 @@ export async function POST(
       async start(controller) {
         let fullAssistantContent = '';
         try {
-          // Use structured output if intent detected
           await createCompletion(
-            openRouterMessages, 
-            model, 
+            openRouterMessages,
+            model,
             (chunk: string) => {
               fullAssistantContent += chunk;
               controller.enqueue(encoder.encode(`data: ${chunk}\n\n`));
@@ -192,9 +226,9 @@ export async function POST(
           });
 
           await prisma.message.create({
-            data: { 
-              conversationId, 
-              content: message, 
+            data: {
+              conversationId,
+              content: message,
               role: MessageRole.user,
               image,
             },
@@ -252,16 +286,14 @@ export async function DELETE(
     });
 
     if (!conversation || conversation.userId !== session.user.id) {
-      return NextResponse.json({ error: 'Conversation not found or unauthorized' }, { status: 404 });
+      return NextResponse.json(
+        { error: 'Conversation not found or unauthorized' },
+        { status: 404 }
+      );
     }
 
-    await prisma.message.deleteMany({
-      where: { conversationId },
-    });
-    await prisma.conversation.delete({
-      where: { id: conversationId },
-    });
-
+    await prisma.message.deleteMany({ where: { conversationId } });
+    await prisma.conversation.delete({ where: { id: conversationId } });
     await store.delete(conversationId);
 
     return NextResponse.json({ success: true }, { status: 200 });
