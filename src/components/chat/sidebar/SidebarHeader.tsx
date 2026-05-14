@@ -1,7 +1,11 @@
+// src/components/chat/sidebar/SidebarHeader.tsx
+// Replace the existing file with this version — adds a Workspace nav button.
+
 "use client";
 import Image from "next/image";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { Plus, ChevronLeft, ChevronRight } from "lucide-react";
+import { Plus, ChevronLeft, ChevronRight, LayoutGrid } from "lucide-react";
 
 interface SidebarHeaderProps {
   onNewSubject: () => void;
@@ -45,15 +49,39 @@ const SidebarHeader = ({ onNewSubject, onCollapse, collapsed }: SidebarHeaderPro
         )}
       </div>
 
-      {/* Second row: New Chat button (only when expanded) */}
+      {/* Second row: New Chat + Workspace buttons (only when expanded) */}
       {!collapsed && (
-        <Button
-          onClick={onNewSubject}
-          className="w-full justify-start gap-3 bg-[#173dfd] text-white hover:bg-blue-600"
-        >
-          <Plus size={18} />
-          New Chat
-        </Button>
+        <div className="flex flex-col gap-2">
+          <Button
+            onClick={onNewSubject}
+            className="w-full justify-start gap-3 bg-[#173dfd] text-white hover:bg-blue-600"
+          >
+            <Plus size={18} />
+            New Chat
+          </Button>
+
+          <Link href="/workspace" className="w-full">
+            <Button
+              variant="outline"
+              className="w-full justify-start gap-3 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:bg-[#1A1A1A] dark:hover:bg-[#1A1A1A]"
+            >
+              <LayoutGrid size={16} />
+              Workspace
+            </Button>
+          </Link>
+        </div>
+      )}
+
+      {/* Collapsed: show workspace icon */}
+      {collapsed && (
+        <Link href="/workspace" className="flex justify-center mt-1">
+          <button
+            className="p-2 rounded-lg hover:bg-gray-200 dark:hover:bg-[#1A1A1A] transition-colors"
+            title="Workspace"
+          >
+            <LayoutGrid size={18} className="text-gray-500 dark:text-gray-400" />
+          </button>
+        </Link>
       )}
     </div>
   );
