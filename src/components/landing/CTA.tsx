@@ -1,7 +1,7 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Sparkles } from "lucide-react";
 import { useState } from "react";
 import { SignInModal } from "@/components/auth/signinModal";
 import { useSession } from "next-auth/react";
@@ -12,7 +12,7 @@ const CTA = () => {
   const { status } = useSession();
   const router = useRouter();
 
-  const handleCreateRoom = () => {
+  const handlePrimaryAction = () => {
     if (status === "authenticated") {
       router.push("/chat");
     } else {
@@ -20,76 +20,92 @@ const CTA = () => {
     }
   };
 
-  const handleSignIn = () => {
+  const handleSecondaryAction = () => {
     if (status === "authenticated") {
-      router.push("/chat");
+      router.push("/dashboard"); // Changed to /dashboard for clarity
     } else {
       setShowSignInModal(true);
     }
   };
+
+  const isLoading = status === "loading";
 
   return (
     <>
-      <section id="cta" className="border-y bg-gray-50/50">
-        <div className="container mx-auto px-4 py-16 md:py-20">
+      <section id="cta" className="relative border-y bg-gradient-to-b from-gray-50 to-white overflow-hidden">
+        {/* Subtle background pattern */}
+        <div className="absolute inset-0 bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] [background-size:20px_20px] opacity-40" />
+
+        <div className="container mx-auto px-4 py-20 md:py-24 relative">
           <div className="mx-auto max-w-2xl text-center">
-            {/* Main CTA heading */}
-            <h2 className="mt-4 font-display text-3xl tracking-tight text-black md:text-4xl">
-              Ready to study
-              <span className="relative mx-2">
-                <span className="text-blue-600">smarter?</span>
-                <div className="absolute -bottom-1 left-0 right-0 h-0.5 bg-gradient-to-r from-blue-400 to-blue-600 opacity-60" />
-              </span>
-            </h2>
-            
-            {/* Supporting text */}
-            <p className="mt-4 text-gray-600 leading-relaxed">
-              Join thousands of STEM students who&apos;ve transformed their study routine. 
-              Create your first subject room and start generating practice materials in under 60 seconds.
-            </p>
-            
-            {/* Value props */}
-            <div className="mt-6 flex flex-wrap items-center justify-center gap-6 text-sm text-gray-500">
-              <div className="flex items-center gap-1">
-                <div className="h-1 w-1 rounded-full bg-blue-600" />
-                <span>No credit card required</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <div className="h-1 w-1 rounded-full bg-blue-600" />
-                <span>Free forever plan</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <div className="h-1 w-1 rounded-full bg-blue-600" />
-                <span>Setup in 60 seconds</span>
-              </div>
+            {/* Badge */}
+            <div className="inline-flex items-center gap-2 rounded-full bg-blue-50 px-4 py-1 text-sm font-medium text-blue-700 mb-6">
+              <Sparkles className="h-4 w-4" />
+              Now in Beta
             </div>
-            
-            {/* CTA buttons */}
-            <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-4">
-              <Button 
+
+            {/* Main Heading */}
+            <h2 className="font-display text-4xl md:text-5xl lg:text-6xl tracking-tighter text-black leading-[1.1]">
+              Study{" "}
+              <span className="relative inline-block">
+                smarter
+                <div className="absolute -bottom-1 left-0 right-0 h-2 bg-gradient-to-r from-blue-500 via-blue-600 to-indigo-600 rounded opacity-75" />
+              </span>
+              , not harder
+            </h2>
+
+            {/* Supporting text */}
+            <p className="mt-6 text-lg text-gray-600 max-w-lg mx-auto leading-relaxed">
+              Join thousands of STEM students creating personalized practice materials, 
+              solving doubts instantly, and mastering concepts faster.
+            </p>
+
+            {/* Trust signals */}
+            <div className="mt-8 flex flex-wrap items-center justify-center gap-x-8 gap-y-3 text-sm text-gray-500">
+              <div className="flex items-center gap-2">
+                <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                <span>No credit card needed</span>
+              </div>
+              <div>Free forever plan</div>
+              <div>Setup in &lt; 60 seconds</div>
+            </div>
+
+            {/* CTA Buttons */}
+            <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
+              <Button
                 size="lg"
-                onClick={handleCreateRoom}
-                disabled={status === "loading"}
-                className="group bg-blue-600 text-white hover:bg-blue-700 shadow-lg shadow-blue-600/20 hover:shadow-blue-600/30 transition-all duration-200 px-8"
+                onClick={handlePrimaryAction}
+                disabled={isLoading}
+                className="group relative h-14 px-8 text-base font-semibold bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-xl shadow-blue-500/25 hover:shadow-2xl hover:shadow-blue-500/30 transition-all duration-300 rounded-xl"
               >
-                {status === "loading" ? "Loading..." : status === "authenticated" ? "Go to Chat" : "Create your first room"}
-                <ArrowRight className="ml-2 h-4 w-4 group-hover:translate-x-0.5 transition-transform" />
+                {isLoading ? (
+                  "Loading..."
+                ) : status === "authenticated" ? (
+                  "Go to Chat"
+                ) : (
+                  "Create your first room"
+                )}
+                <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
               </Button>
-              <Button 
-                size="lg" 
+
+              <Button
+                size="lg"
                 variant="outline"
-                onClick={handleSignIn}
-                disabled={status === "loading"}
-                className="border-gray-300 text-gray-700 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700 transition-all duration-200 px-8"
+                onClick={handleSecondaryAction}
+                disabled={isLoading}
+                className="h-14 px-8 text-base font-medium border-2 hover:bg-gray-50 transition-colors rounded-xl"
               >
                 {status === "authenticated" ? "Go to Dashboard" : "Sign in"}
               </Button>
             </div>
+
+            <p className="mt-4 text-xs text-gray-500">
+              14-day free access to all features • Cancel anytime
+            </p>
           </div>
         </div>
       </section>
 
-      {/* Sign In Modal */}
       <SignInModal open={showSignInModal} onOpenChange={setShowSignInModal} />
     </>
   );
