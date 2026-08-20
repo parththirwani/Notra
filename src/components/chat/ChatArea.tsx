@@ -1,11 +1,12 @@
 "use client";
+
+import { useEffect, useRef } from "react";
+import Image from "next/image";
+import { MessageRole } from "@prisma/client";
 import { Message } from "./types";
 import { cn } from "@/lib/utils";
 import MarkdownMessage from "./MarkdownMessage";
 import InteractiveMessage from "./InteractiveMessage";
-import { useEffect, useRef } from "react";
-import Image from "next/image";
-import { MessageRole } from "@prisma/client";
 
 interface ChatAreaProps {
   messages: Message[];
@@ -13,9 +14,10 @@ interface ChatAreaProps {
 
 function formatLocalTimestamp(timestamp?: string): string {
   if (!timestamp) return "";
+
   try {
-    const d = new Date(timestamp);
-    return d.toLocaleString(undefined, {
+    const date = new Date(timestamp);
+    return date.toLocaleString(undefined, {
       year: "numeric",
       month: "short",
       day: "2-digit",
@@ -30,72 +32,81 @@ function formatLocalTimestamp(timestamp?: string): string {
 const ChatArea = ({ messages }: ChatAreaProps) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
-
   useEffect(() => {
-    scrollToBottom();
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
   return (
-    <div className="flex flex-col gap-4 p-4">
-      {messages.map((message) => (
-        <div
-          key={message.id}
-          className={cn(
-            "flex",
-            message.role === MessageRole.user ? "justify-end" : "justify-start"
-          )}
-        >
+    <div className="flex flex-col gap-5 p-5 md:p-6">
+      {messages.map((message) => {
+        const isUser = message.role === MessageRole.user;
+
+        return (
           <div
+            key={message.id}
             className={cn(
-              "rounded-2xl px-4 py-3 text-sm shadow-md max-w-[75%] whitespace-normal break-words leading-relaxed",
-              message.role === MessageRole.user
-                ? "bg-blue-500 text-white self-end"
-                : "bg-gray-200 text-gray-900 self-start dark:bg-[#2a2a2a] dark:text-white"
+              "flex w-full",
+              isUser ? "justify-end" : "justify-start"
             )}
           >
-            {/* Display image if present */}
-            {message.image && (
-              <div className="mb-3 rounded-lg overflow-hidden border-2 border-white/20">
-                <div className="relative w-full h-48">
-                  <Image
-                    src={message.image}
-                    alt="Uploaded image"
-                    fill
-                    className="object-cover"
-                  />
-                </div>
-              </div>
-            )}
-
             <div
               className={cn(
-                "markdown-body",
-                // For user messages: override prose colors to white
-                // For assistant messages: let prose use its default (dark text / light bg aware)
-                message.role === MessageRole.user
-                  ? "[&_*]:text-white [&_code]:bg-white/20 [&_pre]:bg-white/10"
-                  : ""
+                "group relative max-w-[min(75%,36rem)] rounded-2xl px-4 py-3 text-sm leading-relaxed shadow-sm transition-shadow",
+                "whitespace-normal break-words",
+                isUser
+                  ? "bg-blue-600 text-white shadow-blue-600/10"
+                  : "bg-gray-100 text-gray-900 dark:bg-zinc-800 dark:text-zinc-100"
               )}
             >
-              {message.role === MessageRole.assistant ? (
-                // isDark=true so prose-invert kicks in inside dark:bg-[#2a2a2a]
-                <InteractiveMessage content={message.content} />
-              ) : (
-                // User bubble is always blue, so pass isDark=false — text is handled by the wrapper above
-                <MarkdownMessage content={message.content || ""} isDark={false} />
+              {message.image && (
+                <div className="mb-3 overflow-hidden rounded-xl border border-black/5 dark:border-white/10">
+                  <div className="relative h-48 w-full">
+                    <Image
+                      src={message.image}
+                      alt="Uploaded image"
+                      fill
+                      className="object-cover"
+                      sizes="(max-width: 768px) 100vw, 400px"
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div
+                className={cn(
+                  "markdown-body",
+                  isUser &&
+                    "[&_*]:text-white [&_code]:bg-white/20 [&_pre]:bg-white/10 [&_a]:text-blue-100 [&_a:hover]:text-white"
+                )}
+              >
+                {isUser ? (
+                  <MarkdownMessage
+                    content={message.content || ""}
+                    isDark={false}
+                  />
+                ) : (
+                  <InteractiveMessage content={message.content} />
+                )}
+              </div>
+
+              {message.timestamp && (
+                <div
+                  className={cn(
+                    "mt-2 text-right text-[11px] tabular-nums tracking-tight",
+                    isUser
+                      ? "text-blue-100/80"
+                      : "text-gray-500 dark:text-zinc-400"
+                  )}
+                >
+                  {formatLocalTimestamp(message.timestamp)}
+                </div>
               )}
             </div>
-
-            <div className="text-xs opacity-70 mt-2 text-right">
-              {formatLocalTimestamp(message.timestamp)}
-            </div>
           </div>
-        </div>
-      ))}
-      <div ref={messagesEndRef} />
+        );
+      })}
+
+      <div ref={messagesEndRef} aria-hidden="true" />
     </div>
   );
 };
