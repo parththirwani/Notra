@@ -1,5 +1,6 @@
 import { MODEL } from "@/types/chat";
 import { MessageRole } from "@prisma/client";
+import { getProviderConfig } from "@/lib/ai/provider";
 
 type OpenRouterRole = "system" | "user" | "assistant";
 
@@ -123,8 +124,8 @@ export async function createCompletion(
   onChunk: (chunk: string) => void,
   responseFormat?: "mcq" | "flashcard" | "quiz"
 ): Promise<void> {
-  if (!process.env.OPENROUTER_KEY) {
-    throw new Error("OPENROUTER_API_KEY is not set");
+  if (!process.env.OPENROUTER_KEY && !process.env.LITELLM_KEY) {
+    throw new Error("No AI provider key is set (OPENROUTER_KEY or LITELLM_KEY)");
   }
 
   const openRouterMessages: OpenRouterMessage[] = messages.map((msg) => {
@@ -175,21 +176,18 @@ export async function createCompletion(
     };
   }
 
-  const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+  const { baseUrl, headers } = getProviderConfig();
+
+  const response = await fetch(`${baseUrl}/chat/completions`, {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${process.env.OPENROUTER_KEY}`,
-      "Content-Type": "application/json",
-      "HTTP-Referer": process.env.NEXTAUTH_URL || "http://localhost:3000",
-      "X-Title": "Notra",
-    },
+    headers,
     body: JSON.stringify(requestBody),
   });
 
   if (!response.ok) {
     const errorText = await response.text();
-    console.error("OpenRouter API error:", response.status, errorText);
-    throw new Error(`OpenRouter API error ${response.status}: ${errorText}`);
+    console.error("AI provider API error:", response.status, errorText);
+    throw new Error(`AI provider API error ${response.status}: ${errorText}`);
   }
 
   const reader = response.body?.getReader();
@@ -233,8 +231,8 @@ export async function createCompletionOnce(
   model: MODEL,
   responseFormat?: "mcq" | "flashcard" | "quiz"
 ): Promise<string> {
-  if (!process.env.OPENROUTER_KEY) {
-    throw new Error("OPENROUTER_API_KEY is not set");
+  if (!process.env.OPENROUTER_KEY && !process.env.LITELLM_KEY) {
+    throw new Error("No AI provider key is set (OPENROUTER_KEY or LITELLM_KEY)");
   }
 
   const openRouterMessages: OpenRouterMessage[] = messages.map((msg) => {
@@ -284,21 +282,18 @@ export async function createCompletionOnce(
     };
   }
 
-  const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+  const { baseUrl, headers } = getProviderConfig();
+
+  const response = await fetch(`${baseUrl}/chat/completions`, {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${process.env.OPENROUTER_KEY}`,
-      "Content-Type": "application/json",
-      "HTTP-Referer": process.env.NEXTAUTH_URL || "http://localhost:3000",
-      "X-Title": "Notra",
-    },
+    headers,
     body: JSON.stringify(requestBody),
   });
 
   if (!response.ok) {
     const errorText = await response.text();
-    console.error("OpenRouter API error:", response.status, errorText);
-    throw new Error(`OpenRouter API error ${response.status}: ${errorText}`);
+    console.error("AI provider API error:", response.status, errorText);
+    throw new Error(`AI provider API error ${response.status}: ${errorText}`);
   }
 
   const data = await response.json();
