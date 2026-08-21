@@ -1,25 +1,20 @@
 /**
  * src/lib/ai/embeddings.ts
  *
- * Embeds text using OpenAI text-embedding-3-small via OpenRouter.
- * Returns a 1536-dim float vector.
+ * Embeds text using OpenAI text-embedding-3-small via the active AI provider
+ * (OpenRouter or LiteLLM). Returns a 1536-dim float vector.
  */
+
+import { getProviderConfig } from "@/lib/ai/provider";
 
 const EMBEDDING_MODEL = "openai/text-embedding-3-small";
 
 export async function embedText(text: string): Promise<number[]> {
-  if (!process.env.OPENROUTER_KEY) {
-    throw new Error("OPENROUTER_KEY is not set");
-  }
+  const { baseUrl, headers } = getProviderConfig();
 
-  const response = await fetch("https://openrouter.ai/api/v1/embeddings", {
+  const response = await fetch(`${baseUrl}/embeddings`, {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${process.env.OPENROUTER_KEY}`,
-      "Content-Type": "application/json",
-      "HTTP-Referer": process.env.NEXTAUTH_URL || "http://localhost:3000",
-      "X-Title": "Notra",
-    },
+    headers,
     body: JSON.stringify({
       model: EMBEDDING_MODEL,
       input: text.slice(0, 512), // keep it cheap — topic labels are short

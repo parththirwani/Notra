@@ -7,6 +7,8 @@
  * Place this file at: src/lib/ai/titleService.ts
  */
 
+import { getProviderConfig } from "@/lib/ai/provider";
+
 // ---------------------------------------------------------------------------
 // Config
 // ---------------------------------------------------------------------------
@@ -74,36 +76,26 @@ export async function generateChatTitle(
 // ---------------------------------------------------------------------------
 
 async function callLLMForTitle(userContent: string): Promise<string> {
-  if (!process.env.OPENROUTER_KEY) {
-    throw new Error("OPENROUTER_KEY is not set");
-  }
+  const { baseUrl, headers } = getProviderConfig();
 
-  const response = await fetch(
-    "https://openrouter.ai/api/v1/chat/completions",
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${process.env.OPENROUTER_KEY}`,
-        "Content-Type": "application/json",
-        "HTTP-Referer": process.env.NEXTAUTH_URL || "http://localhost:3000",
-        "X-Title": "Notra",
-      },
-      body: JSON.stringify({
-        model: TITLE_MODEL,
-        messages: [
-          { role: "system", content: TITLE_SYSTEM_PROMPT },
-          { role: "user", content: userContent },
-        ],
-        stream: false,
-        temperature: 0.3,
-        max_tokens: 20,
-      }),
-    }
-  );
+  const response = await fetch(`${baseUrl}/chat/completions`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      model: TITLE_MODEL,
+      messages: [
+        { role: "system", content: TITLE_SYSTEM_PROMPT },
+        { role: "user", content: userContent },
+      ],
+      stream: false,
+      temperature: 0.3,
+      max_tokens: 20,
+    }),
+  });
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(`OpenRouter API error ${response.status}: ${errorText}`);
+    throw new Error(`AI provider API error ${response.status}: ${errorText}`);
   }
 
   const data = await response.json();
